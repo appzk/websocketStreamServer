@@ -18,11 +18,12 @@ var mutex sync.Mutex
 
 const (
 	LOG_LEVEL_DISABLE = -1
-	LOG_LEVEL_INFO    = 0
+	LOG_LEVEL_TRACE   = 0
 	LOG_LEVEL_WARN    = 1
 	LOG_LEVEL_DEBUG   = 2
-	LOG_LEVEL_ERROR   = 3
-	LOG_LEVEL_FATAL   = 4
+	LOG_LEVEL_INFO    = 3
+	LOG_LEVEL_ERROR   = 4
+	LOG_LEVEL_FATAL   = 5
 )
 
 const (
@@ -47,9 +48,9 @@ func SetOutput(w io.Writer) {
 	cout = w
 }
 
-func LOGI(v ...interface{}) {
-	if level <= LOG_LEVEL_INFO {
-		getLogAppend(LOG_LEVEL_INFO, v)
+func LOGT(v ...interface{}) {
+	if level <= LOG_LEVEL_TRACE {
+		getLogAppend(LOG_LEVEL_TRACE, v)
 	}
 }
 
@@ -62,6 +63,12 @@ func LOGW(v ...interface{}) {
 func LOGD(v ...interface{}) {
 	if level <= LOG_LEVEL_DEBUG {
 		getLogAppend(LOG_LEVEL_DEBUG, v)
+	}
+}
+
+func LOGI(v ...interface{}) {
+	if level <= LOG_LEVEL_INFO {
+		getLogAppend(LOG_LEVEL_INFO, v)
 	}
 }
 
@@ -90,12 +97,14 @@ func getLogAppend(lvl int, v ...interface{}) (str string) {
 	}
 	//lvl
 	switch lvl {
-	case LOG_LEVEL_INFO:
-		str += "[INFO] "
+	case LOG_LEVEL_TRACE:
+		str += "[TRACE] "
 	case LOG_LEVEL_WARN:
 		str += "[WARN] "
 	case LOG_LEVEL_DEBUG:
 		str += "[DEBUG] "
+	case LOG_LEVEL_INFO:
+		str += "[INFO] "
 	case LOG_LEVEL_ERROR:
 		str += "[ERROR] "
 	case LOG_LEVEL_FATAL:

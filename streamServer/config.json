@@ -1,0 +1,5 @@
+{
+    "RTMP": "RTMPConfig.json",
+    "WebSocket": "WebSocketConfig.json",
+	"LogPath":"Log/"
+}

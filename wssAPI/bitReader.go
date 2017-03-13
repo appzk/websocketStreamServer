@@ -1,4 +1,4 @@
-package commonUtils
+package wssAPI
 
 import (
 	"bytes"
