@@ -26,7 +26,7 @@ type RTMPConfig struct {
 }
 
 var service *RTMPService
-var serviceConfig *RTMPConfig
+var serviceConfig RTMPConfig
 
 func (this *RTMPService) Init(msg *wssAPI.Msg) (err error) {
 	if nil == msg || nil == msg.Param1 {
@@ -81,7 +81,7 @@ func (this *RTMPService) loadConfigFile(fileName string) (err error) {
 	if err != nil {
 		return
 	}
-	err = json.Unmarshal(data, serviceConfig)
+	err = json.Unmarshal(data, &serviceConfig)
 	if err != nil {
 		return
 	}
@@ -98,7 +98,7 @@ func (this *RTMPService) loadConfigFile(fileName string) (err error) {
 		strPort = strconv.Itoa(serviceConfig.Port)
 	}
 	logger.LOGI("rtmp://address:" + strPort + "/" + serviceConfig.LivePath + "/streamName")
-	logger.LOGI("rtmp time out: " + strconv.Itoa(serviceConfig.TimeoutSec) + " s")
+	logger.LOGI("rtmp timeout: " + strconv.Itoa(serviceConfig.TimeoutSec) + " s")
 	return
 }
 
@@ -114,5 +114,12 @@ func (this *RTMPService) rtmpLoop() {
 }
 
 func (this *RTMPService) handleConnect(conn net.Conn) {
+	var err error
+	defer conn.Close()
+	err = rtmpHandleshake(conn)
+	if err != nil {
+		logger.LOGE("rtmp handle shake failed")
+		return
+	}
 
 }
