@@ -11,11 +11,8 @@ func main() {
 }
 
 func initLogger() {
-	//logger.SetFlags(logger.)
 	logger.SetFlags(logger.LOG_SHORT_FILE | logger.LOG_TIME)
 	logger.SetLogLevel(logger.LOG_LEVEL_INFO)
-	ch := make(chan int)
-	<-ch
 }
 
 func startServers() {
@@ -29,4 +26,7 @@ func startServers() {
 		logger.LOGE(err.Error())
 		return
 	}
+
+	ch := make(chan int)
+	<-ch
 }
