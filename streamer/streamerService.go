@@ -53,7 +53,7 @@ func (this *StreamerService) ProcessMessage(msg *wssAPI.Msg) (err error) {
 	return
 }
 
-func Addsource(path string, publisher wssAPI.Obj) (src wssAPI.Obj, err error) {
+func Addsource(path string) (src wssAPI.Obj, err error) {
 	if service == nil {
 		err = errors.New("streamer invalid")
 		return
@@ -91,22 +91,50 @@ func DelSource(path string) (err error) {
 	if exist == false {
 		return errors.New(path + " not found")
 	} else {
-		oldSrc.SetProducer(false)
+		remove := oldSrc.SetProducer(false)
+		if remove == true {
+			delete(service.sources, path)
+		}
 		return
 	}
 	return
 }
 
-func AddSink() (err error) {
+func AddSink(path, sinkId string, sinker wssAPI.Obj) (err error) {
 	if service == nil {
 		return errors.New("streamer invalid")
+	}
+	service.mutexSources.Lock()
+	defer service.mutexSources.Unlock()
+	src, exist := service.sources[path]
+	if false == exist {
+		err = errors.New("source not found in add sink")
+		return
+	} else {
+		return src.AddSink(sinkId, sinker)
 	}
 	return
 }
 
-func DelSink() (err error) {
+func DelSink(path, sinkId string) (err error) {
 	if service == nil {
 		return errors.New("streamer invalid")
+	}
+	service.mutexSources.Lock()
+	defer service.mutexSources.Unlock()
+	src, exist := service.sources[path]
+	if false == exist {
+		return errors.New("source not found in del sink")
+	} else {
+		removeSrc := false
+		err, removeSrc = src.DelSink(sinkId)
+		if err != nil {
+			logger.LOGE(err.Error())
+			return errors.New("delete sink" + sinkId + " failed")
+		}
+		if true == removeSrc {
+			delete(service.sources, path)
+		}
 	}
 	return
 }

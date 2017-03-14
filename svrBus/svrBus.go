@@ -1,12 +1,16 @@
 package svrBus
 
 import (
+	"RTMPService"
 	"encoding/json"
 	"errors"
 	"logger"
 	"os"
+	"streamer"
+	"strings"
 	"sync"
 	"time"
+	"webSocketService"
 	"wssAPI"
 )
 
@@ -56,19 +60,42 @@ func (this *SvrBus) loadConfig() (err error) {
 		this.createLogFile(cfg.LogPath)
 	}
 
-	if len(cfg.RTMPConfigName) > 0 {
+	if true {
+		livingSvr := &streamer.StreamerService{}
+		livingSvr.Init(nil)
+		this.mutexServices.Lock()
+		this.services[livingSvr.GetType()] = livingSvr
+		this.mutexServices.Unlock()
+	}
 
+	if len(cfg.RTMPConfigName) > 0 {
+		rtmpSvr := &RTMPService.RTMPService{}
+		msg := &wssAPI.Msg{}
+		msg.Param1 = cfg.RTMPConfigName
+		rtmpSvr.Init(msg)
+		this.mutexServices.Lock()
+		this.services[rtmpSvr.GetType()] = rtmpSvr
+		this.mutexServices.Unlock()
 	}
 
 	if len(cfg.WebSocketConfigName) > 0 {
-
+		webSocketSvr := &webSocketService.WebSocketService{}
+		msg := &wssAPI.Msg{}
+		msg.Param1 = cfg.WebSocketConfigName
+		webSocketSvr.Init(msg)
+		this.mutexServices.Lock()
+		this.services[webSocketSvr.GetType()] = webSocketSvr
+		this.mutexServices.Unlock()
 	}
 
 	return
 }
 
 func (this *SvrBus) createLogFile(logPath string) {
-	dir := logPath + time.Now().Format("2006/01/02/")
+	if strings.HasSuffix(logPath, "/") {
+		logPath = strings.TrimSuffix(logPath, "/")
+	}
+	dir := logPath + time.Now().Format("/2006/01/02/")
 	bResult, _ := wssAPI.CheckDirectory(dir)
 
 	if false == bResult {
