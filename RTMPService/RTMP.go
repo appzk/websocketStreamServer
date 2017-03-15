@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"logger"
+	"math/rand"
 	"mediaTypes/flv"
 	"net"
 	"wssAPI"
@@ -21,6 +22,8 @@ const (
 	RTMP_channel_SendPlayback = 0x05
 	RTMP_channel_AV           = 0x08
 )
+
+var bwCheckCounts float64
 
 const (
 	RTMP_PACKET_TYPE_CHUNK_SIZE         = 0x01
@@ -109,6 +112,12 @@ func (this *RTMPPacket) Copy() (dst *RTMPPacket) {
 }
 
 func (this *RTMPPacket) ToFLVTag() (dst *flv.FlvTag) {
+	dst = &flv.FlvTag{}
+	dst.TagType = this.MessageTypeId
+	dst.StreamID = 0
+	dst.Timestamp = this.TimeStamp
+	dst.Data = make([]byte, len(this.Body))
+	copy(dst.Data, this.Body)
 	return
 }
 
@@ -379,4 +388,309 @@ func (this *RTMP) SendPacket(packet *RTMPPacket, queue bool) (err error) {
 		this.methodCache[int32(transactionId)] = cmdName
 	}
 	return
+}
+
+func (this *RTMP) HandleControl(pkt *RTMPPacket) (err error) {
+	ctype, err := AMF0DecodeInt16(pkt.Body)
+	if err != nil {
+		return
+	}
+	switch ctype {
+	case RTMP_CTRL_streamBegin:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("stream begin:%d", streamId))
+	case RTMP_CTRL_streamEof:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("stream eof:%d", streamId))
+	case RTMP_CTRL_streamDry:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("stream dry:%d", streamId))
+	case RTMP_CTRL_setBufferLength:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		buffMS, _ := AMF0DecodeInt32(pkt.Body[6:])
+		this.buffMS = uint32(buffMS)
+		this.StreamId = uint32(streamId)
+		//logger.LOGI(fmt.Sprintf("set buffer length --streamid:%d--buffer length:%d", this.StreamId, this.buffMS))
+	case RTMP_CTRL_streamIsRecorded:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("stream %d is recorded", streamId))
+	case RTMP_CTRL_pingRequest:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("ping :d", streamId))
+	case RTMP_CTRL_pingResponse:
+		streamId, _ := AMF0DecodeInt32(pkt.Body[2:])
+		logger.LOGT(fmt.Sprintf("pong :d", streamId))
+	case RTMP_CTRL_streamBufferEmpty:
+		logger.LOGT(fmt.Sprintf("buffer empty"))
+	case RTMP_CTRL_streamBufferReady:
+		logger.LOGT(fmt.Sprintf("buffer ready"))
+	default:
+		logger.LOGI(fmt.Sprintf("rtmp control type:%d not processed", ctype))
+	}
+	return
+}
+
+func (this *RTMP) AcknowledgementBW() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_control
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_SERVER_BW
+	pkt.TimeStamp = 0
+	pkt.MessageStreamId = 0
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeInt32(int32(this.TargetBW))
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) SetPeerBW() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_control
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_CLIENT_BW
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeInt32(int32(this.SelfBW))
+	encoder.AppendByte(byte(this.LimitType))
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+
+	err = this.SendPacket(pkt, false)
+
+	return
+}
+
+func (this *RTMP) SetChunkSize(chunkSize uint32) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_control
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_CHUNK_SIZE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeInt32(int32(chunkSize))
+	this.ChunkSize = chunkSize
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) ConnectResult(obj *AMF0Object) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("_result")
+	idx := obj.AMF0GetPropByIndex(1).Value.NumValue
+	encoder.EncodeNumber(idx)
+
+	encoder.AppendByte(AMF0_object)
+	encoder.EncodeNamedString("fmsVer", "FMS/5,0,3,3029")
+	encoder.EncodeNamedNumber("capabilities", 255)
+	encoder.EncodeNamedNumber("mode", 1)
+	encoder.EncodeInt24(AMF0_object_end)
+
+	encoder.AppendByte(AMF0_object)
+	encoder.EncodeNamedString("level", "status")
+	encoder.EncodeNamedString("code", "NetConnection.Connect.Success")
+	encoder.EncodeNamedString("description", "Connection succeeded.")
+	objEncodeNumber := 3.0
+	if obj.Props.Len() == 3 {
+		cmdObj := obj.AMF0GetPropByIndex(2)
+		objEncode := cmdObj.Value.ObjValue.AMF0GetPropByName("objectEncoding")
+		if objEncode != nil {
+			objEncodeNumber = objEncode.Value.NumValue
+			logger.LOGI(objEncodeNumber)
+		}
+	}
+	encoder.EncodeNamedNumber("objectEncoding", objEncodeNumber)
+	encoder.EncodeInt16(4)
+	encoder.AppendByte('d')
+	encoder.AppendByte('a')
+	encoder.AppendByte('t')
+	encoder.AppendByte('a')
+	encoder.AppendByte(AMF0_ecma_array)
+	encoder.EncodeInt32(0)
+	encoder.EncodeNamedString("version", "5,0,3,3029")
+	encoder.EncodeInt24(AMF0_object_end)
+	encoder.EncodeInt24(AMF0_object_end)
+
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) CmdError(level string, code string, description string, idx float64) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("_error")
+	encoder.EncodeNumber(idx)
+	encoder.AppendByte(AMF0_null)
+	encoder.AppendByte(AMF0_object)
+	encoder.EncodeNamedString("level", level)
+	encoder.EncodeNamedString("code", code)
+	encoder.EncodeNamedString("description", description)
+	encoder.EncodeInt24(AMF0_object_end)
+
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) CmdStatus(level, code, description, details string, clientId float64, channel int) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = int32(channel)
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+	pkt.MessageStreamId = 1
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("onStatus")
+	encoder.EncodeNumber(0.0)
+	encoder.AppendByte(AMF0_null)
+	encoder.AppendByte(AMF0_object)
+	encoder.EncodeNamedString("level", level)
+	encoder.EncodeNamedString("code", code)
+	if len(details) > 0 {
+		encoder.EncodeNamedString("details", details)
+	}
+	encoder.EncodeNamedNumber("clientId", clientId)
+	encoder.EncodeInt24(AMF0_object_end)
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) CmdNumberResult(idx float64, numValue float64) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("_result")
+	encoder.EncodeNumber(idx)
+	encoder.AppendByte(AMF0_null)
+	encoder.EncodeNumber(numValue)
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) SendCtrl(ctype int, obj uint32, time uint32) (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_control
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_CONTROL
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	if ctype == RTMP_CTRL_setBufferLength {
+		encoder.EncodeInt16(int16(ctype))
+		encoder.EncodeInt32(int32(obj))
+		encoder.EncodeInt32(int32(time))
+	} else {
+
+		encoder.EncodeInt16(int16(ctype))
+		encoder.EncodeInt32(int32(obj))
+	}
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) OnBWDone() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("onBWDone")
+	encoder.EncodeNumber(0.0)
+	encoder.AppendByte(AMF0_null)
+
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+func (this *RTMP) OnBWCheck() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("_onbwcheck")
+	encoder.EncodeNumber(bwCheckCounts)
+	bwCheckCounts += 1.0
+	//encoder.AppendByteArray() //18384 char
+	strByte := make([]byte, 16384)
+	for i := 0; i < 16384; i++ {
+		strByte[i] = byte(rand.Int()%95) + 32
+	}
+	encoder.EncodeString(string(strByte))
+	encoder.EncodeNumber(0)
+	encoder.AppendByte(AMF0_null)
+
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, true)
+	return
+}
+
+func (this *RTMP) _OnBWDone() (err error) {
+
 }

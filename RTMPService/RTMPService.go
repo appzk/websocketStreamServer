@@ -6,6 +6,7 @@ import (
 	"logger"
 	"net"
 	"strconv"
+	"time"
 	"wssAPI"
 )
 
@@ -116,10 +117,48 @@ func (this *RTMPService) rtmpLoop() {
 func (this *RTMPService) handleConnect(conn net.Conn) {
 	var err error
 	defer conn.Close()
+	defer logger.LOGT("close connect")
 	err = rtmpHandleshake(conn)
 	if err != nil {
 		logger.LOGE("rtmp handle shake failed")
 		return
 	}
 
+	rtmp := &RTMP{}
+	rtmp.Init(conn)
+
+	msgInit := &wssAPI.Msg{}
+	msgInit.Param1 = rtmp
+
+	handler := &RTMPHandler{}
+	err = handler.Init(msgInit)
+	if err != nil {
+		logger.LOGE("rtmp handler init failed")
+		return
+	}
+
+	for {
+		var packet *RTMPPacket
+		packet, err = this.readPacket(rtmp, handler.Status())
+		if err != nil {
+			return
+		}
+		err = handler.HandleRTMPPacket(packet)
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (this *RTMPService) readPacket(rtmp *RTMP, status int) (packet *RTMPPacket, err error) {
+	if status != rtmp_status_playing {
+		err = rtmp.Conn.SetReadDeadline(time.Now().Add(time.Duration(serviceConfig.TimeoutSec) * time.Second))
+		if err != nil {
+			logger.LOGE(err.Error())
+			return
+		}
+		defer rtmp.Conn.SetReadDeadline(time.Time{})
+	}
+	packet, err = rtmp.ReadPacket()
+	return
 }
