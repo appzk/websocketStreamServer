@@ -671,8 +671,8 @@ func (this *RTMP) OnBWCheck() (err error) {
 	encoder := &AMF0Encoder{}
 	encoder.Init()
 	encoder.EncodeString("_onbwcheck")
-	encoder.EncodeNumber(bwCheckCounts)
 	bwCheckCounts += 1.0
+	encoder.EncodeNumber(bwCheckCounts)
 	//encoder.AppendByteArray() //18384 char
 	strByte := make([]byte, 16384)
 	for i := 0; i < 16384; i++ {
@@ -692,5 +692,24 @@ func (this *RTMP) OnBWCheck() (err error) {
 }
 
 func (this *RTMP) _OnBWDone() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
 
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("_onbwdone")
+	encoder.EncodeNumber(0)
+	encoder.EncodeNumber(0)
+	encoder.EncodeNumber(0)
+	encoder.AppendByte(AMF0_null)
+
+	pkt.Body, err = encoder.GetData()
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
 }

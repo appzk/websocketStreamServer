@@ -55,6 +55,7 @@ func (this *RTMPService) Start(msg *wssAPI.Msg) (err error) {
 	this.listener, err = net.ListenTCP("tcp4", tcpAddr)
 	if err != nil {
 		logger.LOGE(err.Error())
+		return
 	}
 	go this.rtmpLoop()
 	return
@@ -95,7 +96,7 @@ func (this *RTMPService) loadConfigFile(fileName string) (err error) {
 		serviceConfig.LivePath = livePathDefault
 	}
 	strPort := ""
-	if strPort != "1935" {
+	if serviceConfig.Port != 1935 {
 		strPort = strconv.Itoa(serviceConfig.Port)
 	}
 	logger.LOGI("rtmp://address:" + strPort + "/" + serviceConfig.LivePath + "/streamName")

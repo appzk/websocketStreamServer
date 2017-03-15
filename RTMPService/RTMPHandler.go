@@ -118,9 +118,22 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 	case "_checkbw":
 		err = this.rtmpInstance.OnBWCheck()
 	case "_result":
-		logger.LOGI(method.Value)
+		this.handle_result(amfobj)
+	case "releaseStream":
+		//amfobj.Dump()
+		按照以前的方式
 	default:
 		logger.LOGW(fmt.Sprintf("rtmp method <%s> not processed", method.Value.StrValue))
 	}
 	return
+}
+
+func (this *RTMPHandler) handle_result(amfobj *AMF0Object) {
+	transactionId := int32(amfobj.AMF0GetPropByIndex(1).Value.NumValue)
+	resultMethod := this.rtmpInstance.methodCache[transactionId]
+	switch resultMethod {
+	case "_onbwcheck":
+	default:
+		logger.LOGW("result of " + resultMethod + " not processed")
+	}
 }
