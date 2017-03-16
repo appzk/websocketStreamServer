@@ -54,6 +54,9 @@ func (this *StreamerService) ProcessMessage(msg *wssAPI.Msg) (err error) {
 	return
 }
 
+//src control sink
+//add source:not start src,start sinks
+//del source:not stop src,stop sinks
 func Addsource(path string) (src wssAPI.Obj, err error) {
 	if service == nil {
 		logger.LOGE("streamer service null")
@@ -105,6 +108,8 @@ func DelSource(path string) (err error) {
 	return
 }
 
+//add sink:auto start sink by src
+//del sink:not stop sink,stop by sink itself
 func AddSink(path, sinkId string, sinker wssAPI.Obj) (err error) {
 	if service == nil {
 		return errors.New("streamer invalid")

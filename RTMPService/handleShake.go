@@ -216,13 +216,13 @@ func createComplexS2() (s2 []byte) {
 }
 
 func validClient(buf []byte) (scheme int, challenge []byte, digest []byte) {
-	challenge, digest, err := validClientScheme(buf, 0)
+	challenge, digest, err := validClientScheme(buf, 1)
 	if err == nil {
 		return 0, challenge, digest
 	} else {
 		logger.LOGI(err.Error())
 	}
-	challenge, digest, err = validClientScheme(buf, 1)
+	challenge, digest, err = validClientScheme(buf, 0)
 	if err == nil {
 		return 1, challenge, digest
 	} else {

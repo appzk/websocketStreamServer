@@ -122,22 +122,23 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 		return
 	}
 	this.sinks[id] = sink
-	err = sink.Start(nil)
-
-	if this.audioHeader != nil {
-		msg.Param1 = this.audioHeader
-		msg.Type = wssAPI.MSG_FLV_TAG
-		sink.ProcessMessage(msg)
-	}
-	if this.videoHeader != nil {
-		msg.Param1 = this.videoHeader
-		msg.Type = wssAPI.MSG_FLV_TAG
-		sink.ProcessMessage(msg)
-	}
-	if this.metadata != nil {
-		msg.Param1 = this.metadata
-		msg.Type = wssAPI.MSG_FLV_TAG
-		sink.ProcessMessage(msg)
+	if this.bProducer {
+		err = sink.Start(nil)
+		if this.audioHeader != nil {
+			msg.Param1 = this.audioHeader
+			msg.Type = wssAPI.MSG_FLV_TAG
+			sink.ProcessMessage(msg)
+		}
+		if this.videoHeader != nil {
+			msg.Param1 = this.videoHeader
+			msg.Type = wssAPI.MSG_FLV_TAG
+			sink.ProcessMessage(msg)
+		}
+		if this.metadata != nil {
+			msg.Param1 = this.metadata
+			msg.Type = wssAPI.MSG_FLV_TAG
+			sink.ProcessMessage(msg)
+		}
 	}
 	return
 }
@@ -145,11 +146,12 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 func (this *streamSource) DelSink(id string) (err error, removeSrc bool) {
 	this.mutexSink.Lock()
 	defer this.mutexSink.Unlock()
-	sink, exist := this.sinks[id]
+	_, exist := this.sinks[id]
 	if false == exist {
 		return errors.New("sink " + id + " not found"), false
 	}
-	sink.Stop(nil)
+	//sink.Stop(nil)
+	//just delete ,not stop
 	delete(this.sinks, id)
 	//check if delete source
 	if 0 == len(this.sinks) && this.bProducer == false {

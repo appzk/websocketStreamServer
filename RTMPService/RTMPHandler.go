@@ -18,11 +18,15 @@ const (
 type RTMPHandler struct {
 	mutexStatus  sync.RWMutex
 	status       int
+	lastCmd      int //publish or play
 	rtmpInstance *RTMP
 	source       wssAPI.Obj
 	sinke        wssAPI.Obj
 	streamName   string
 	clientId     string
+	playReset    bool
+	playing      bool //true for thread send playing data
+	chPlaying    chan int
 }
 
 func (this *RTMPHandler) Init(msg *wssAPI.Msg) (err error) {
@@ -32,6 +36,11 @@ func (this *RTMPHandler) Init(msg *wssAPI.Msg) (err error) {
 }
 
 func (this *RTMPHandler) Start(msg *wssAPI.Msg) (err error) {
+	if this.lastCmd == rtmp_status_publishing {
+		err = this.startPublishing()
+	} else if this.lastCmd == rtmp_status_playing {
+		err = this.startPlaying()
+	}
 	return
 }
 
@@ -178,6 +187,7 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 
 		this.mutexStatus.Lock()
 		defer this.mutexStatus.Unlock()
+		this.lastCmd = rtmp_status_publishing
 		//check status
 		if this.status != rtmp_status_idle {
 			logger.LOGE("publish on bad status ")
@@ -197,13 +207,8 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 			return
 		}
 		this.rtmpInstance.Link.Path = amfobj.AMF0GetPropByIndex(2).Value.StrValue
-		err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
-		if err != nil {
-			logger.LOGE(err.Error())
-			streamer.DelSource(this.streamName)
-			return nil
-		}
-		err = this.startPublishing()
+
+		err = this.Start(nil)
 		if err != nil {
 			logger.LOGE(err.Error())
 			streamer.DelSource(this.streamName)
@@ -213,7 +218,9 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 	case "FCUnpublish":
 		this.shutdown()
 	case "deleteStream":
-		//do nothing now
+	//do nothing now
+	case "play":
+		this.lastCmd = rtmp_status_playing
 	default:
 		logger.LOGW(fmt.Sprintf("rtmp method <%s> not processed", method.Value.StrValue))
 	}
@@ -236,14 +243,14 @@ func (this *RTMPHandler) shutdown() {
 	switch this.status {
 	case rtmp_status_idle:
 	case rtmp_status_publishing:
-		this.stopPlaying()
+		this.stopPublishing()
 		err := streamer.DelSource(this.streamName)
 		if err != nil {
 			logger.LOGE("del source failed" + err.Error())
 		}
 		this.status = rtmp_status_idle
 	case rtmp_status_playing:
-		this.stopPublishing()
+		this.stopPlaying()
 		err := streamer.DelSink(this.streamName, this.clientId)
 		if err != nil {
 			logger.LOGE("del sink failed:" + err.Error())
@@ -253,21 +260,80 @@ func (this *RTMPHandler) shutdown() {
 }
 
 func (this *RTMPHandler) startPlaying() (err error) {
+
+	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
+	if err != nil {
+		logger.LOGE(err.Error())
+		streamer.DelSource(this.streamName)
+		return nil
+	}
+	if true == this.playReset {
+		err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Reset",
+			fmt.Sprintf("Playing and resetting %s", this.rtmpInstance.Link.Path),
+			this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
+		if err != nil {
+			logger.LOGE(err.Error())
+			return
+		}
+	}
+
+	err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Start",
+		fmt.Sprintf("Started playing %s", this.rtmpInstance.Link.Path), this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
+	if err != nil {
+		logger.LOGE(err.Error())
+		return
+	}
+	//start playing thread
+	this.chPlaying = make(chan int)
 	return
 }
 
-func (this *RTMPHandler) stopPlaying() {
+func (this *RTMPHandler) stopPlaying() (err error) {
+	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamEof, 1, 0)
+	if err != nil {
+		logger.LOGE(err.Error())
+		streamer.DelSource(this.streamName)
+		return nil
+	}
+	err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Stop",
+		fmt.Sprintf("Stoped playing %s", this.rtmpInstance.Link.Path), this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
+	if err != nil {
+		logger.LOGE(err.Error())
+		return
+	}
 
+	//stop playing thread
+	<-this.chPlaying
+	close(cha)
+	return
 }
 
 func (this *RTMPHandler) startPublishing() (err error) {
+	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
+	if err != nil {
+		logger.LOGE(err.Error())
+		streamer.DelSource(this.streamName)
+		return nil
+	}
 	err = this.rtmpInstance.CmdStatus("status", "NetStream.Publish.Start",
 		fmt.Sprintf("publish %s", this.rtmpInstance.Link.Path), "", 0, RTMP_channel_Invoke)
 	return
 }
 
 func (this *RTMPHandler) stopPublishing() (err error) {
+	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamEof, 1, 0)
+	if err != nil {
+		logger.LOGE(err.Error())
+		streamer.DelSource(this.streamName)
+		return nil
+	}
 	err = this.rtmpInstance.CmdStatus("status", "NetStream.Unpublish.Succes",
 		fmt.Sprintf("unpublish %s", this.rtmpInstance.Link.Path), "", 0, RTMP_channel_Invoke)
 	return
+}
+
+func (this *RTMPHandler) threadPlaying() {
+	defer func() {
+
+	}()
 }
