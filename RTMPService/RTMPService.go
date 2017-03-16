@@ -142,6 +142,7 @@ func (this *RTMPService) handleConnect(conn net.Conn) {
 		var packet *RTMPPacket
 		packet, err = this.readPacket(rtmp, handler.Status())
 		if err != nil {
+			handler.HandleRTMPPacket(nil)
 			return
 		}
 		err = handler.HandleRTMPPacket(packet)

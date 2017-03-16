@@ -88,3 +88,15 @@ func GetAudioTag(flvTag *FlvTag) (result *AudioTag, err error) {
 func GetVideoTag(flvTag *FlvTag) (result *VideoTag, err error) {
 	return
 }
+
+func (this *FlvTag) Copy() (dst *FlvTag) {
+	dst = &FlvTag{}
+	dst.StreamID = this.StreamID
+	dst.TagType = this.TagType
+	dst.Timestamp = this.Timestamp
+	if len(this.Data) > 0 {
+		dst.Data = make([]byte, len(this.Data))
+		copy(dst.Data, this.Data)
+	}
+	return
+}

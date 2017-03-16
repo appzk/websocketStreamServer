@@ -2,14 +2,20 @@ package streamer
 
 import (
 	"errors"
+	"fmt"
+	"logger"
+	"mediaTypes/flv"
 	"sync"
 	"wssAPI"
 )
 
 type streamSource struct {
-	bProducer bool
-	mutexSink sync.RWMutex
-	sinks     map[string]*streamSink
+	bProducer   bool
+	mutexSink   sync.RWMutex
+	sinks       map[string]*streamSink
+	metadata    *flv.FlvTag
+	audioHeader *flv.FlvTag
+	videoHeader *flv.FlvTag
 }
 
 func (this *streamSource) Init(msg *wssAPI.Msg) (err error) {
@@ -34,6 +40,34 @@ func (this *streamSource) HandleTask(task *wssAPI.Task) (err error) {
 }
 
 func (this *streamSource) ProcessMessage(msg *wssAPI.Msg) (err error) {
+	switch msg.Type {
+	case wssAPI.MSG_FLV_TAG:
+		tag := msg.Param1.(*flv.FlvTag)
+		switch tag.TagType {
+		case flv.FLV_TAG_Audio:
+			if this.audioHeader == nil {
+				this.audioHeader = tag.Copy()
+				this.audioHeader.Timestamp = 0
+			}
+		case flv.FLV_TAG_Video:
+			if this.videoHeader == nil {
+				this.videoHeader = tag.Copy()
+				this.videoHeader.Timestamp = 0
+			}
+		case flv.FLV_TAG_ScriptData:
+			if this.metadata == nil {
+				this.metadata = tag.Copy()
+			}
+		}
+		this.mutexSink.RLock()
+		defer this.mutexSink.RUnlock()
+		for _, v := range this.sinks {
+			v.ProcessMessage(msg)
+		}
+		return
+	default:
+		logger.LOGW(fmt.Sprintf("msg type %d not processed", msg.Type))
+	}
 	return
 }
 
@@ -47,6 +81,8 @@ func (this *streamSource) SetProducer(status bool) (remove bool) {
 	}
 	this.bProducer = status
 	if this.bProducer == false {
+		//clear cache
+		this.clearCache()
 		//notify sinks stop
 		if 0 == len(this.sinks) {
 			return true
@@ -58,7 +94,10 @@ func (this *streamSource) SetProducer(status bool) (remove bool) {
 		}
 		return
 	} else {
+		//clear cache
+		this.clearCache()
 		//notify sinks start
+		this.mutexSink.RLock()
 		defer this.mutexSink.RUnlock()
 		for _, v := range this.sinks {
 			v.Start(nil)
@@ -84,6 +123,22 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 	}
 	this.sinks[id] = sink
 	err = sink.Start(nil)
+
+	if this.audioHeader != nil {
+		msg.Param1 = this.audioHeader
+		msg.Type = wssAPI.MSG_FLV_TAG
+		sink.ProcessMessage(msg)
+	}
+	if this.videoHeader != nil {
+		msg.Param1 = this.videoHeader
+		msg.Type = wssAPI.MSG_FLV_TAG
+		sink.ProcessMessage(msg)
+	}
+	if this.metadata != nil {
+		msg.Param1 = this.metadata
+		msg.Type = wssAPI.MSG_FLV_TAG
+		sink.ProcessMessage(msg)
+	}
 	return
 }
 
@@ -101,4 +156,10 @@ func (this *streamSource) DelSink(id string) (err error, removeSrc bool) {
 		removeSrc = true
 	}
 	return
+}
+
+func (this *streamSource) clearCache() {
+	this.metadata = nil
+	this.audioHeader = nil
+	this.videoHeader = nil
 }

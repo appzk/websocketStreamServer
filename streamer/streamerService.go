@@ -22,6 +22,7 @@ var service *StreamerService
 
 func (this *StreamerService) Init(msg *wssAPI.Msg) (err error) {
 	this.sources = make(map[string]*streamSource)
+	service = this
 	return
 }
 
@@ -55,11 +56,14 @@ func (this *StreamerService) ProcessMessage(msg *wssAPI.Msg) (err error) {
 
 func Addsource(path string) (src wssAPI.Obj, err error) {
 	if service == nil {
+		logger.LOGE("streamer service null")
 		err = errors.New("streamer invalid")
 		return
 	}
+
 	service.mutexSources.Lock()
 	defer service.mutexSources.Unlock()
+	logger.LOGT("add source:" + path)
 	oldSrc, exist := service.sources[path]
 	if exist == false {
 		oldSrc = &streamSource{}
@@ -87,6 +91,7 @@ func DelSource(path string) (err error) {
 	}
 	service.mutexSources.Lock()
 	defer service.mutexSources.Unlock()
+	logger.LOGT("del source:" + path)
 	oldSrc, exist := service.sources[path]
 	if exist == false {
 		return errors.New(path + " not found")

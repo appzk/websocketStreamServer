@@ -700,9 +700,9 @@ func (this *RTMP) _OnBWDone() (err error) {
 	encoder := &AMF0Encoder{}
 	encoder.Init()
 	encoder.EncodeString("_onbwdone")
-	encoder.EncodeNumber(0)
-	encoder.EncodeNumber(0)
-	encoder.EncodeNumber(0)
+	encoder.EncodeNumber(0) //??
+	encoder.EncodeNumber(0) //??
+	encoder.EncodeNumber(0) //??
 	encoder.AppendByte(AMF0_null)
 
 	pkt.Body, err = encoder.GetData()
