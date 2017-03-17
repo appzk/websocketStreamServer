@@ -98,7 +98,7 @@ func TcpWrite(conn net.Conn, data []byte) (writed int, err error) {
 	for writed < len(data) {
 		ret, err := conn.Write(data[writed:])
 		if err != nil {
-			logger.LOGE(err.Error())
+			//logger.LOGE(err.Error())
 			return writed, err
 		}
 		writed += ret

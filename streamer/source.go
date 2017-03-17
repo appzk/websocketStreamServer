@@ -121,6 +121,7 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 	if err != nil {
 		return
 	}
+
 	this.sinks[id] = sink
 	if this.bProducer {
 		err = sink.Start(nil)
@@ -144,6 +145,7 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 }
 
 func (this *streamSource) DelSink(id string) (err error, removeSrc bool) {
+	logger.LOGT("del sink:" + id)
 	this.mutexSink.Lock()
 	defer this.mutexSink.Unlock()
 	_, exist := this.sinks[id]

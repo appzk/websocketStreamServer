@@ -116,8 +116,9 @@ func (this *RTMPPacket) ToFLVTag() (dst *flv.FlvTag) {
 	dst.TagType = this.MessageTypeId
 	dst.StreamID = 0
 	dst.Timestamp = this.TimeStamp
-	dst.Data = make([]byte, len(this.Body))
-	copy(dst.Data, this.Body)
+	//dst.Data = make([]byte, len(this.Body))
+	//copy(dst.Data, this.Body)
+	dst.Data = this.Body
 	return
 }
 
@@ -129,8 +130,9 @@ func FlvTagToRTMPPacket(ta *flv.FlvTag) (dst *RTMPPacket) {
 	dst.MessageStreamId = 1
 	dst.MessageTypeId = ta.TagType
 	dst.MessageLength = uint32(len(ta.Data))
-	dst.Body = make([]byte, dst.MessageLength)
-	copy(dst.Body, ta.Data)
+	//dst.Body = make([]byte, dst.MessageLength)
+	//copy(dst.Body, ta.Data)
+	dst.Body = ta.Data
 	return
 }
 

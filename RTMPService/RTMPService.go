@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	rtmpTypeHandler = "rtmpHandler"
-	livePathDefault = "live"
-	timeoutDefault  = 3000
+	rtmpTypeHandler  = "rtmpHandler"
+	livePathDefault  = "live"
+	timeoutDefault   = 3000
+	rtmpCacheDefault = 1000
 )
 
 type RTMPService struct {
@@ -24,6 +25,7 @@ type RTMPConfig struct {
 	Port       int    `json:"Port"`
 	TimeoutSec int    `json:"TimeoutSec"`
 	LivePath   string `json:"LivePath"`
+	CacheCount int    `json:"CacheCount"`
 }
 
 var service *RTMPService
@@ -95,6 +97,9 @@ func (this *RTMPService) loadConfigFile(fileName string) (err error) {
 	if len(serviceConfig.LivePath) == 0 {
 		serviceConfig.LivePath = livePathDefault
 	}
+	if serviceConfig.CacheCount == 0 {
+		serviceConfig.CacheCount = rtmpCacheDefault
+	}
 	strPort := ""
 	if serviceConfig.Port != 1935 {
 		strPort = strconv.Itoa(serviceConfig.Port)
@@ -118,7 +123,7 @@ func (this *RTMPService) rtmpLoop() {
 func (this *RTMPService) handleConnect(conn net.Conn) {
 	var err error
 	defer conn.Close()
-	defer logger.LOGT("close connect")
+	defer logger.LOGT("close connect>>>")
 	err = rtmpHandleshake(conn)
 	if err != nil {
 		logger.LOGE("rtmp handle shake failed")
