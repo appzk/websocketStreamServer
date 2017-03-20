@@ -13,6 +13,7 @@ type streamSource struct {
 	bProducer   bool
 	mutexSink   sync.RWMutex
 	sinks       map[string]*streamSink
+	streamName  string
 	metadata    *flv.FlvTag
 	audioHeader *flv.FlvTag
 	videoHeader *flv.FlvTag
@@ -20,6 +21,7 @@ type streamSource struct {
 
 func (this *streamSource) Init(msg *wssAPI.Msg) (err error) {
 	this.sinks = make(map[string]*streamSink)
+	this.streamName = msg.Param1.(string)
 	return
 }
 
@@ -109,6 +111,7 @@ func (this *streamSource) SetProducer(status bool) (remove bool) {
 func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 	this.mutexSink.Lock()
 	defer this.mutexSink.Unlock()
+	logger.LOGT(this.streamName + " add sink:" + id)
 	_, exist := this.sinks[id]
 	if true == exist {
 		return errors.New("sink " + id + " exist")
@@ -119,6 +122,7 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 	msg.Param2 = sinker
 	err = sink.Init(msg)
 	if err != nil {
+		logger.LOGE("sink init failed")
 		return
 	}
 
@@ -145,7 +149,7 @@ func (this *streamSource) AddSink(id string, sinker wssAPI.Obj) (err error) {
 }
 
 func (this *streamSource) DelSink(id string) (err error, removeSrc bool) {
-	logger.LOGT("del sink:" + id)
+	logger.LOGT(this.streamName + " del sink:" + id)
 	this.mutexSink.Lock()
 	defer this.mutexSink.Unlock()
 	_, exist := this.sinks[id]

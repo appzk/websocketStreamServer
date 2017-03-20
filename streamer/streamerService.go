@@ -70,9 +70,10 @@ func Addsource(path string) (src wssAPI.Obj, err error) {
 	oldSrc, exist := service.sources[path]
 	if exist == false {
 		oldSrc = &streamSource{}
-		oldSrc.Init(nil)
+		msg := &wssAPI.Msg{}
+		msg.Param1 = path
+		oldSrc.Init(msg)
 		oldSrc.SetProducer(true)
-		logger.LOGT("end set true")
 		service.sources[path] = oldSrc
 		src = oldSrc
 		return
@@ -102,7 +103,6 @@ func DelSource(path string) (err error) {
 		return errors.New(path + " not found")
 	} else {
 		remove := oldSrc.SetProducer(false)
-		logger.LOGT("set false")
 		if remove == true {
 			delete(service.sources, path)
 		}

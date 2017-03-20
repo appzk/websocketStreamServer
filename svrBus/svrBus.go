@@ -6,6 +6,7 @@ import (
 	"errors"
 	"logger"
 	"os"
+	"runtime"
 	"streamer"
 	"strings"
 	"sync"
@@ -131,6 +132,10 @@ func (this *SvrBus) createLogFile(logPath string) {
 }
 
 func (this *SvrBus) Start(msg *wssAPI.Obj) (err error) {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	logger.LOGI(runtime.NumCgoCall())
+	logger.LOGI(runtime.NumCPU())
+	logger.LOGI(runtime.NumGoroutine())
 	this.mutexServices.RLock()
 	defer this.mutexServices.RUnlock()
 	for k, v := range this.services {

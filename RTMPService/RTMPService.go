@@ -142,7 +142,7 @@ func (this *RTMPService) handleConnect(conn net.Conn) {
 		logger.LOGE("rtmp handler init failed")
 		return
 	}
-
+	logger.LOGT("new connect:" + conn.RemoteAddr().String())
 	for {
 		var packet *RTMPPacket
 		packet, err = this.readPacket(rtmp, handler.Status())

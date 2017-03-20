@@ -16,10 +16,9 @@ const (
 	rtmp_status_idle          = 0
 	rtmp_status_beforePlay    = 1 //recved play,not return play.start:start playing,stop nothing
 	rtmp_status_playing       = 2 //return play.start,start send thread:start nothing,stop playing
-	rtmp_status_played        = 3 //stoped play:start playing,stop nothing
 	rtmp_status_beforePublish = 4 //recved publish:start publish,stop nil
 	rtmp_status_publishing    = 5 //publishing:start nil,stop publish
-	rtmp_status_published     = 6 //stoped publish:start publish,stop nil
+	rtmp_status_closed        = 7
 	//shutdown or play to publish or publish to play ,del
 )
 
@@ -59,68 +58,10 @@ func (this *RTMPHandler) Init(msg *wssAPI.Msg) (err error) {
 }
 
 func (this *RTMPHandler) Start(msg *wssAPI.Msg) (err error) {
-	this.mutexStatus.Lock()
-	defer this.mutexStatus.Unlock()
-	switch this.status {
-	case rtmp_status_idle:
-	case rtmp_status_beforePlay:
-		err = this.startPlaying()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_playing)
-	case rtmp_status_playing:
-	case rtmp_status_played:
-		err = this.startPlaying()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_playing)
-	case rtmp_status_beforePublish:
-		err = this.startPublishing()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_publishing)
-	case rtmp_status_publishing:
-	case rtmp_status_published:
-		err = this.startPublishing()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_publishing)
-	}
 	return
 }
 
 func (this *RTMPHandler) Stop(msg *wssAPI.Msg) (err error) {
-	this.mutexStatus.Lock()
-	defer this.mutexStatus.Unlock()
-	switch this.status {
-	case rtmp_status_idle:
-	case rtmp_status_beforePlay:
-	case rtmp_status_playing:
-		err = this.stopPlaying()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_played)
-	case rtmp_status_played:
-	case rtmp_status_beforePublish:
-	case rtmp_status_publishing:
-		err = this.stopPublishing()
-		if err != nil {
-			logger.LOGE(err.Error())
-			return
-		}
-		this.changeStatus(rtmp_status_published)
-	case rtmp_status_published:
-	}
 	return
 }
 
@@ -176,6 +117,45 @@ func (this *RTMPHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 		this.playInfo.mutexCache.Lock()
 		this.playInfo.cache.PushBack(tag)
 		this.playInfo.mutexCache.Unlock()
+	case wssAPI.MSG_PLAY_START:
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		err = this.updateStatus(rtmp_status_playing)
+		if err != nil {
+			logger.LOGE("start play failed")
+			return
+		}
+		err = this.startPlaying()
+		return
+	case wssAPI.MSG_PLAY_STOP:
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		err = this.updateStatus(rtmp_status_beforePlay)
+		if err != nil {
+			logger.LOGE("stop playing failed")
+			return
+		}
+		return
+	case wssAPI.MSG_PUBLISH_START:
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		err = this.updateStatus(rtmp_status_publishing)
+		if err != nil {
+			logger.LOGE("start publish failed")
+			return
+		}
+		err = this.startPublishing()
+		return
+	case wssAPI.MSG_PUBLISH_STOP:
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		err = this.updateStatus(rtmp_status_beforePublish)
+		if err != nil {
+			logger.LOGE("stop publish failed")
+			return
+		}
+		err = this.stopPublishing()
+		return
 	default:
 		logger.LOGW(fmt.Sprintf("msg type: %s not processed", msg.Type))
 		return
@@ -189,7 +169,7 @@ func (this *RTMPHandler) Status() int {
 
 func (this *RTMPHandler) HandleRTMPPacket(packet *RTMPPacket) (err error) {
 	if nil == packet {
-		this.shutdown()
+		this.updateStatus(rtmp_status_idle)
 		return
 	}
 	switch packet.MessageTypeId {
@@ -197,6 +177,7 @@ func (this *RTMPHandler) HandleRTMPPacket(packet *RTMPPacket) (err error) {
 		this.rtmpInstance.ChunkSize, err = AMF0DecodeInt32(packet.Body)
 	case RTMP_PACKET_TYPE_CONTROL:
 		err = this.rtmpInstance.HandleControl(packet)
+	case RTMP_PACKET_TYPE_BYTES_READ_REPORT:
 	case RTMP_PACKET_TYPE_SERVER_BW:
 		this.rtmpInstance.TargetBW, err = AMF0DecodeInt32(packet.Body)
 	case RTMP_PACKET_TYPE_CLIENT_BW:
@@ -293,7 +274,7 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
 		err = this.rtmpInstance.CmdNumberResult(idx, 1.0)
 	case "publish":
-		this.changeStatus(rtmp_status_beforePublish)
+		this.updateStatus(rtmp_status_beforePublish)
 		//check prop
 		if amfobj.Props.Len() < 4 {
 			logger.LOGE("invalid props length")
@@ -325,18 +306,25 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 		err = this.startPublishing()
 		if err != nil {
 			logger.LOGE(err.Error())
-			this.stopPublishing()
-			this.changeStatus(rtmp_status_idle)
+			this.updateStatus(rtmp_status_idle)
 			return nil
 		}
-		this.changeStatus(rtmp_status_publishing)
+		this.updateStatus(rtmp_status_publishing)
 	case "FCUnpublish":
-		this.shutdown()
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		this.updateStatus(rtmp_status_idle)
 	case "deleteStream":
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		this.updateStatus(rtmp_status_idle)
 	//do nothing now
 	case "play":
-		this.changeStatus(rtmp_status_beforePlay)
+		this.mutexStatus.Lock()
+		defer this.mutexStatus.Unlock()
+		this.updateStatus(rtmp_status_beforePlay)
 		this.streamName = amfobj.AMF0GetPropByIndex(3).Value.StrValue
+		this.rtmpInstance.Link.Path = this.streamName
 		this.playInfo.startTime = -2
 		this.playInfo.duration = -1
 		this.playInfo.reset = false
@@ -377,31 +365,8 @@ func (this *RTMPHandler) handle_result(amfobj *AMF0Object) {
 	}
 }
 
-func (this *RTMPHandler) shutdown() {
-	this.mutexStatus.Lock()
-	defer this.mutexStatus.Unlock()
-	switch this.status {
-	case rtmp_status_idle:
-	case rtmp_status_beforePlay:
-	case rtmp_status_playing:
-		err := this.stopPlaying()
-		if err != nil {
-			logger.LOGE("del sink failed:" + err.Error())
-		}
-	case rtmp_status_played:
-	case rtmp_status_beforePublish:
-	case rtmp_status_publishing:
-		err := this.stopPublishing()
-		if err != nil {
-			logger.LOGE("del source failed" + err.Error())
-		}
-	case rtmp_status_published:
-	}
-	this.changeStatus(rtmp_status_idle)
-}
-
 func (this *RTMPHandler) startPlaying() (err error) {
-	logger.LOGT("start play")
+
 	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
 	if err != nil {
 		logger.LOGE(err.Error())
@@ -424,13 +389,6 @@ func (this *RTMPHandler) startPlaying() (err error) {
 		return
 	}
 	//start playing thread
-	this.playInfo.cache = list.New()
-	this.playInfo.playing = true
-	this.playInfo.audioHeader = nil
-	this.playInfo.videoHeader = nil
-	this.playInfo.metadata = nil
-	this.playInfo.beginTime = 0
-	this.playInfo.keyFrameWrited = false
 	go this.threadPlaying()
 	return
 }
@@ -485,60 +443,102 @@ func (this *RTMPHandler) stopPublishing() (err error) {
 	return
 }
 
-func (this *RTMPHandler) changeStatus(newStatus int) {
-	switch this.status {
+//改变状态，移除源或槽
+func (this *RTMPHandler) updateStatus(status int) (err error) {
+
+	switch status {
 	case rtmp_status_idle:
-	case rtmp_status_beforePlay:
-		if newStatus != rtmp_status_playing {
-			this.delObj()
-		}
-	case rtmp_status_playing:
-		if newStatus != rtmp_status_played && newStatus != rtmp_status_beforePlay {
-			this.delObj()
-		}
-	case rtmp_status_played:
-		if newStatus != rtmp_status_playing {
-			this.delObj()
+		switch this.status {
+		case rtmp_status_beforePlay:
+			err = streamer.DelSink(this.streamName, this.clientId)
+			this.status = status
+			return
+		case rtmp_status_playing:
+			err = this.stopPlaying()
+			if err != nil {
+				logger.LOGE("stop playing failed:" + err.Error())
+			}
+			err = streamer.DelSink(this.streamName, this.clientId)
+			this.status = status
+			return
+		case rtmp_status_beforePublish:
+			err = streamer.DelSource(this.streamName)
+			this.status = status
+			return
+		case rtmp_status_publishing:
+			err = this.stopPublishing()
+			if err != nil {
+				logger.LOGE("stop publish failed:" + err.Error())
+			}
+			err = streamer.DelSource(this.streamName)
+			this.status = status
+			return
 		}
 	case rtmp_status_beforePublish:
-		if newStatus != rtmp_status_publishing {
-			this.delObj()
+		switch this.status {
+		case rtmp_status_beforePublish:
+			this.status = status
+			return
+		case rtmp_status_idle:
+			this.status = status
+			return
+		case rtmp_status_publishing:
+			//stop publish
+			err = this.stopPublishing()
+			if err != nil {
+				logger.LOGE("stop publish failed:" + err.Error())
+			}
+			err = streamer.DelSource(this.streamName)
+			this.status = status
+			return
+		default:
+			logger.LOGW(fmt.Sprintf("update status to beforePublish from %d not processed", this.status))
 		}
 	case rtmp_status_publishing:
-		if newStatus != rtmp_status_beforePublish && newStatus != rtmp_status_published {
-			this.delObj()
+		if this.status == rtmp_status_beforePublish {
+			this.status = status
+			return
 		}
-	case rtmp_status_published:
-		if newStatus != rtmp_status_publishing {
-			this.delObj()
+	case rtmp_status_beforePlay:
+		switch this.status {
+		case rtmp_status_beforePlay:
+			logger.LOGW("double before play:del sink")
+			err = streamer.DelSink(this.streamName, this.clientId)
+			this.status = status
+			return
+		case rtmp_status_idle:
+			this.status = status
+			return
+		case rtmp_status_playing:
+			err = this.stopPlaying()
+			if err != nil {
+				logger.LOGE("stop playing failed:" + err.Error())
+			}
+			//err = streamer.DelSink(this.streamName, this.clientId)
+			this.status = status
+			return
+		default:
+			logger.LOGW(fmt.Sprintf("update status to beforePlay from %d not processed", this.status))
+		}
+	case rtmp_status_playing:
+		if this.status == rtmp_status_beforePlay {
+			this.status = status
+			return
 		}
 	}
-	this.status = newStatus
-	return
-}
 
-func (this *RTMPHandler) delObj() (err error) {
-	path := this.streamName
-	sinkId := this.clientId
-	if this.sinkAdded && len(path) > 0 && len(sinkId) > 0 {
-		this.sinkAdded = false
-		return streamer.DelSink(path, sinkId)
-	}
-	if this.srcAdded && len(path) > 0 {
-		this.srcAdded = false
-		return streamer.DelSource(path)
-	}
-	return
+	return errors.New(fmt.Sprintf("update status error"))
 }
 
 func (this *RTMPHandler) threadPlaying() {
+	this.playInfo.playing = true
 	this.playInfo.waitPlaying.Add(1)
 	defer func() {
 		this.playInfo.waitPlaying.Done()
 	}()
 	for this.playInfo.playing == true {
 		this.playInfo.mutexCache.Lock()
-		if this.playInfo.cache.Len() == 0 {
+		if this.playInfo.cache == nil || this.playInfo.cache.Len() == 0 {
 			this.playInfo.mutexCache.Unlock()
 			time.Sleep(30 * time.Millisecond)
 			continue
@@ -549,7 +549,7 @@ func (this *RTMPHandler) threadPlaying() {
 			this.rtmpInstance.CmdStatus("warning", "NetStream.Play.InsufficientBW",
 				"instufficient bw", this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
 			//shutdown
-			this.shutdown()
+			this.updateStatus(rtmp_status_idle)
 			return
 		}
 		tag := this.playInfo.cache.Front().Value.(*flv.FlvTag)
@@ -558,8 +558,9 @@ func (this *RTMPHandler) threadPlaying() {
 
 		err := this.rtmpInstance.SendPacket(FlvTagToRTMPPacket(tag), false)
 		if err != nil {
+			logger.LOGT("a ahahah")
+			this.updateStatus(rtmp_status_idle)
 			logger.LOGE("send rtmp packet failed in play")
-			this.shutdown()
 			return
 		}
 	}
@@ -567,6 +568,10 @@ func (this *RTMPHandler) threadPlaying() {
 
 func (this *RTMPPlayInfo) sendInitPackets() {
 	this.mutexCache.Lock()
+	defer this.mutexCache.Unlock()
+	if this.cache == nil {
+		this.cache = list.New()
+	}
 	if this.audioHeader != nil {
 		this.cache.PushBack(this.audioHeader)
 	}
@@ -576,5 +581,4 @@ func (this *RTMPPlayInfo) sendInitPackets() {
 	if this.metadata != nil {
 		this.cache.PushBack(this.metadata)
 	}
-	defer this.mutexCache.Unlock()
 }

@@ -14,7 +14,9 @@ const (
 )
 
 const (
-	MSG_FLV_TAG      = "FLVTag"
-	MSG_STREAM_START = "NetStream.Play.Start"
-	MSG_STREAM_STOP  = "NetStream.Play.Stop"
+	MSG_FLV_TAG       = "FLVTag"
+	MSG_PUBLISH_START = "NetStream.Publish.Start"
+	MSG_PUBLISH_STOP  = "NetStream.Publish.Stop"
+	MSG_PLAY_START    = "NetStream.Play.Start"
+	MSG_PLAY_STOP     = "NetStream.Play.Stop"
 )
