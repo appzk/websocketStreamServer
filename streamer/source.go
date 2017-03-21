@@ -50,6 +50,7 @@ func (this *streamSource) ProcessMessage(msg *wssAPI.Msg) (err error) {
 			if this.audioHeader == nil {
 				this.audioHeader = tag.Copy()
 				this.audioHeader.Timestamp = 0
+				logger.LOGT("a h")
 			}
 		case flv.FLV_TAG_Video:
 			if this.videoHeader == nil {
@@ -167,6 +168,7 @@ func (this *streamSource) DelSink(id string) (err error, removeSrc bool) {
 }
 
 func (this *streamSource) clearCache() {
+	logger.LOGT("clear cache")
 	this.metadata = nil
 	this.audioHeader = nil
 	this.videoHeader = nil

@@ -132,7 +132,9 @@ func (this *SvrBus) createLogFile(logPath string) {
 }
 
 func (this *SvrBus) Start(msg *wssAPI.Obj) (err error) {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	if false {
+		runtime.GOMAXPROCS(runtime.NumCPU())
+	}
 	this.mutexServices.RLock()
 	defer this.mutexServices.RUnlock()
 	for k, v := range this.services {

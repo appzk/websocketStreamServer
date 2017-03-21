@@ -28,6 +28,7 @@ func (this *streamSink) Start(msg *wssAPI.Msg) (err error) {
 	}
 	msg = &wssAPI.Msg{}
 	msg.Type = wssAPI.MSG_PLAY_START
+	logger.LOGT("start sink")
 	go this.sinker.ProcessMessage(msg)
 	//this.sinker.Start(nil)
 	return

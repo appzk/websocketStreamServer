@@ -120,11 +120,13 @@ func (this *RTMPHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 	case wssAPI.MSG_PLAY_START:
 		this.mutexStatus.Lock()
 		defer this.mutexStatus.Unlock()
+		logger.LOGT("start play")
 		err = this.updateStatus(rtmp_status_playing)
 		if err != nil {
 			logger.LOGE("start play failed")
 			return
 		}
+		logger.LOGT("update status end")
 		err = this.startPlaying()
 		return
 	case wssAPI.MSG_PLAY_STOP:
@@ -135,6 +137,7 @@ func (this *RTMPHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 			logger.LOGE("stop playing failed")
 			return
 		}
+		logger.LOGT("stop sink end")
 		return
 	case wssAPI.MSG_PUBLISH_START:
 		this.mutexStatus.Lock()
@@ -388,6 +391,7 @@ func (this *RTMPHandler) startPlaying() (err error) {
 		logger.LOGE(err.Error())
 		return
 	}
+	logger.LOGT("start playing")
 	//start playing thread
 	go this.threadPlaying()
 	return
@@ -416,7 +420,7 @@ func (this *RTMPHandler) stopPlaying() (err error) {
 		logger.LOGE(err.Error())
 		return
 	}
-
+	logger.LOGT("stop play")
 	return
 }
 
@@ -534,6 +538,8 @@ func (this *RTMPHandler) threadPlaying() {
 	this.playInfo.playing = true
 	this.playInfo.waitPlaying.Add(1)
 	defer func() {
+		logger.LOGT("thread play end")
+		this.playInfo.cache = list.New()
 		this.playInfo.waitPlaying.Done()
 	}()
 	for this.playInfo.playing == true {
@@ -555,7 +561,10 @@ func (this *RTMPHandler) threadPlaying() {
 		tag := this.playInfo.cache.Front().Value.(*flv.FlvTag)
 		this.playInfo.cache.Remove(this.playInfo.cache.Front())
 		this.playInfo.mutexCache.Unlock()
-
+		//时间错误
+		多了一个0？
+		
+		logger.LOGT(tag.Timestamp)
 		err := this.rtmpInstance.SendPacket(FlvTagToRTMPPacket(tag), false)
 		if err != nil {
 			logger.LOGT("a ahahah")
@@ -569,15 +578,20 @@ func (this *RTMPHandler) threadPlaying() {
 func (this *RTMPPlayInfo) sendInitPackets() {
 	this.mutexCache.Lock()
 	defer this.mutexCache.Unlock()
+
+	logger.LOGT("send init packet")
 	if this.cache == nil {
 		this.cache = list.New()
 	}
+
 	if this.audioHeader != nil {
 		this.cache.PushBack(this.audioHeader)
 	}
+
 	if this.videoHeader != nil {
 		this.cache.PushBack(this.videoHeader)
 	}
+
 	if this.metadata != nil {
 		this.cache.PushBack(this.metadata)
 	}
