@@ -50,7 +50,6 @@ func (this *streamSource) ProcessMessage(msg *wssAPI.Msg) (err error) {
 			if this.audioHeader == nil {
 				this.audioHeader = tag.Copy()
 				this.audioHeader.Timestamp = 0
-				logger.LOGT("a h")
 			}
 		case flv.FLV_TAG_Video:
 			if this.videoHeader == nil {
@@ -97,8 +96,6 @@ func (this *streamSource) SetProducer(status bool) (remove bool) {
 		}
 		return
 	} else {
-		//clear cache
-		this.clearCache()
 		//notify sinks start
 		this.mutexSink.RLock()
 		defer this.mutexSink.RUnlock()

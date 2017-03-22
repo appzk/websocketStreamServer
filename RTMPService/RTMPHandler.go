@@ -126,7 +126,7 @@ func (this *RTMPHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 			logger.LOGE("start play failed")
 			return
 		}
-		logger.LOGT("update status end")
+
 		err = this.startPlaying()
 		return
 	case wssAPI.MSG_PLAY_STOP:
@@ -302,7 +302,9 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 			logger.LOGE("add source failed:" + err.Error())
 			err = this.rtmpInstance.CmdStatus("error", "NetStream.Publish.BadName",
 				fmt.Sprintf("publish %s.", this.streamName), "", 0, RTMP_channel_Invoke)
-			return
+			this.streamName = ""
+			this.updateStatus(rtmp_status_idle)
+			return errors.New("bad name")
 		}
 		this.srcAdded = true
 		this.rtmpInstance.Link.Path = amfobj.AMF0GetPropByIndex(2).Value.StrValue
@@ -374,6 +376,8 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 			return nil
 		}
 		this.sinkAdded = true
+	case "_error":
+		amfobj.Dump()
 	default:
 		logger.LOGW(fmt.Sprintf("rtmp method <%s> not processed", method.Value.StrValue))
 	}
@@ -392,7 +396,7 @@ func (this *RTMPHandler) handle_result(amfobj *AMF0Object) {
 
 //onstatus publish notify
 func (this *RTMPHandler) startPlaying() (err error) {
-
+	this.playInfo.waitPlaying.Wait()
 	err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.PublishNotify",
 		fmt.Sprintf("%s is now unpublished", this.rtmpInstance.Link.Path),
 		this.rtmpInstance.Link.Path,
@@ -628,7 +632,7 @@ func (this *RTMPPlayInfo) sendInitPackets() {
 	this.mutexCache.Lock()
 	defer this.mutexCache.Unlock()
 
-	logger.LOGT("send init packet")
+	//logger.LOGT("send init packet")
 	if this.cache == nil {
 		this.cache = list.New()
 	}

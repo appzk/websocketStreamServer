@@ -474,9 +474,7 @@ func (this *AMF0Object) AMF0GetPropByName(name string) (prop *AMF0Property) {
 func (this *AMF0Object) Dump() {
 	for e := this.Props.Front(); e != nil; e = e.Next() {
 		prop := e.Value.(*AMF0Property)
-
 		this.dumpProp(prop)
-
 	}
 }
 
@@ -490,7 +488,8 @@ func (this *AMF0Object) dumpProp(prop *AMF0Property) {
 		this.dumpProp(prop)
 	case AMF0_object:
 		logger.LOGT("object")
-		this.dumpProp(prop)
+
+		prop.Value.ObjValue.Dump()
 	case AMF0_strict_array:
 		logger.LOGT("static array")
 		this.dumpProp(prop)
