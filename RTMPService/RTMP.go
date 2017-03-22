@@ -715,3 +715,28 @@ func (this *RTMP) _OnBWDone() (err error) {
 	err = this.SendPacket(pkt, false)
 	return
 }
+
+func (this *RTMP) FCUnpublish() (err error) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INVOKE
+
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("FCUnpbulish")
+	this.NumInvokes++
+	encoder.EncodeNumber(float64(this.NumInvokes))
+	encoder.EncodeString(this.Link.Path)
+	encoder.AppendByte(AMF0_null)
+	pkt.Body, err = encoder.GetData()
+
+	if err != nil {
+		return
+	}
+	pkt.MessageLength = uint32(len(pkt.Body))
+	err = this.SendPacket(pkt, false)
+	return
+}
+
+//func (this *RTMP)

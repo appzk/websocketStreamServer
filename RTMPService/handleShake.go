@@ -8,7 +8,6 @@ import (
 	"logger"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"time"
 	"wssAPI"
@@ -167,12 +166,12 @@ func complexHandleShake(conn net.Conn, c1 []byte) (err error) {
 		return err
 	}
 
-	f, err := os.Create("s1s")
-	f.Write(s1)
-	f.Close()
-	f, err = os.Create("s2s")
-	f.Write(s2Hash)
-	f.Close()
+	//	f, err := os.Create("s1s")
+	//	f.Write(s1)
+	//	f.Close()
+	//	f, err = os.Create("s2s")
+	//	f.Write(s2Hash)
+	//	f.Close()
 
 	//recv c2
 	c2, err := wssAPI.TcpRead(conn, rtmp_randomsize)
