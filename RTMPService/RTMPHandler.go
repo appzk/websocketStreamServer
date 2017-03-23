@@ -177,7 +177,8 @@ func (this *RTMPHandler) HandleRTMPPacket(packet *RTMPPacket) (err error) {
 	}
 	switch packet.MessageTypeId {
 	case RTMP_PACKET_TYPE_CHUNK_SIZE:
-		this.rtmpInstance.ChunkSize, err = AMF0DecodeInt32(packet.Body)
+		this.rtmpInstance.RecvChunkSize, err = AMF0DecodeInt32(packet.Body)
+		logger.LOGT(fmt.Sprintf("chunk size:%d", this.rtmpInstance.RecvChunkSize))
 	case RTMP_PACKET_TYPE_CONTROL:
 		err = this.rtmpInstance.HandleControl(packet)
 	case RTMP_PACKET_TYPE_BYTES_READ_REPORT:
@@ -236,7 +237,9 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 		logger.LOGE("recved invalid amf0 object")
 		return
 	}
-
+	if amfobj.Props.Len() == 0 {
+		logger.LOGT(packet.Body)
+	}
 	method := amfobj.Props.Front().Value.(*AMF0Property)
 
 	switch method.Value.StrValue {

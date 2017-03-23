@@ -14,7 +14,7 @@ const (
 	RTMP_protocol_rtmp      = "rtmp"
 	RTMP_default_chunk_size = 128
 	RTMP_default_buff_ms    = 500
-	RTMP_better_chunk_size  = 4096
+	RTMP_better_chunk_size  = 128
 
 	RTMP_channel_control      = 0x02
 	RTMP_channel_Invoke       = 0x03
@@ -80,21 +80,22 @@ type RTMPPacket struct {
 }
 
 type RTMP struct {
-	Conn        net.Conn
-	ChunkSize   uint32
-	NumInvokes  int32
-	StreamId    uint32
-	Link        RTMP_LINK
-	AudioCodecs int32
-	VideoCodecs int32
-	TargetBW    uint32
-	SelfBW      uint32
-	LimitType   uint32
-	BytesIn     int64
-	BytesInLast int64
-	buffMS      uint32
-	recvCache   map[int32]*RTMPPacket
-	methodCache map[int32]string
+	Conn          net.Conn
+	SendChunkSize uint32
+	RecvChunkSize uint32
+	NumInvokes    int32
+	StreamId      uint32
+	Link          RTMP_LINK
+	AudioCodecs   int32
+	VideoCodecs   int32
+	TargetBW      uint32
+	SelfBW        uint32
+	LimitType     uint32
+	BytesIn       int64
+	BytesInLast   int64
+	buffMS        uint32
+	recvCache     map[int32]*RTMPPacket
+	methodCache   map[int32]string
 }
 
 func (this *RTMPPacket) Copy() (dst *RTMPPacket) {
@@ -138,7 +139,8 @@ func FlvTagToRTMPPacket(ta *flv.FlvTag) (dst *RTMPPacket) {
 
 func (this *RTMP) Init(conn net.Conn) {
 	this.Conn = conn
-	this.ChunkSize = RTMP_default_chunk_size
+	this.SendChunkSize = RTMP_default_chunk_size
+	this.RecvChunkSize = RTMP_default_chunk_size
 	this.AudioCodecs = 3191
 	this.VideoCodecs = 252
 	this.TargetBW = 2500000
@@ -269,8 +271,8 @@ func (this *RTMP) ReadChunk() (packet *RTMPPacket, err error) {
 	}
 	//接收小于等于一个chunksize的数据
 	recvsize := tmpPkt.MessageLength - uint32(tmpPkt.BodyReaded)
-	if recvsize > this.ChunkSize {
-		recvsize = this.ChunkSize
+	if recvsize > this.RecvChunkSize {
+		recvsize = this.RecvChunkSize
 	}
 	tmpBody, err := wssAPI.TcpRead(this.Conn, int(recvsize))
 	if err != nil {
@@ -331,8 +333,8 @@ func (this *RTMP) SendPacket(packet *RTMPPacket, queue bool) (err error) {
 	var bodySended uint32
 	bodySended = 0
 	sendSize := packet.MessageLength
-	if sendSize > this.ChunkSize {
-		sendSize = this.ChunkSize
+	if sendSize > this.SendChunkSize {
+		sendSize = this.SendChunkSize
 	}
 	encoder.AppendByteArray(packet.Body[:sendSize])
 	buf, err := encoder.GetData()
@@ -364,8 +366,8 @@ func (this *RTMP) SendPacket(packet *RTMPPacket, queue bool) (err error) {
 			encoder3.AppendByte(byte(packet.ChunkStreamID-64) >> 8)
 		}
 		sendSize = packet.MessageLength - bodySended
-		if sendSize > this.ChunkSize {
-			sendSize = this.ChunkSize
+		if sendSize > this.SendChunkSize {
+			sendSize = this.SendChunkSize
 		}
 		encoder3.AppendByteArray(packet.Body[bodySended : bodySended+sendSize])
 		buf, err := encoder3.GetData()
@@ -483,7 +485,8 @@ func (this *RTMP) SetChunkSize(chunkSize uint32) (err error) {
 	encoder := &AMF0Encoder{}
 	encoder.Init()
 	encoder.EncodeInt32(int32(chunkSize))
-	this.ChunkSize = chunkSize
+	this.SendChunkSize = chunkSize
+	logger.LOGT(fmt.Sprintf("set chunk size %d", this.SendChunkSize))
 	pkt.Body, err = encoder.GetData()
 	if err != nil {
 		return
