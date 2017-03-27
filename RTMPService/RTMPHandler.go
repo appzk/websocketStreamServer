@@ -252,10 +252,10 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 		if err != nil {
 			return
 		}
-		err = this.rtmpInstance.SetChunkSize(RTMP_better_chunk_size)
-		if err != nil {
-			return
-		}
+		//err = this.rtmpInstance.SetChunkSize(RTMP_better_chunk_size)
+		//		if err != nil {
+		//			return
+		//		}
 		err = this.rtmpInstance.OnBWDone()
 		if err != nil {
 			return
@@ -407,28 +407,28 @@ func (this *RTMPHandler) startPlaying() (err error) {
 	if err != nil {
 		logger.LOGE(err.Error())
 	}
-	//	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
-	//	if err != nil {
-	//		logger.LOGE(err.Error())
-	//		return
-	//	}
+	err = this.rtmpInstance.SendCtrl(RTMP_CTRL_streamBegin, 1, 0)
+	if err != nil {
+		logger.LOGE(err.Error())
+		return
+	}
 
-	//	if true == this.playInfo.playReset {
-	//		err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Reset",
-	//			fmt.Sprintf("Playing and resetting %s", this.rtmpInstance.Link.Path),
-	//			this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
-	//		if err != nil {
-	//			logger.LOGE(err.Error())
-	//			return
-	//		}
-	//	}
+	if true == this.playInfo.playReset {
+		err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Reset",
+			fmt.Sprintf("Playing and resetting %s", this.rtmpInstance.Link.Path),
+			this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
+		if err != nil {
+			logger.LOGE(err.Error())
+			return
+		}
+	}
 
-	//	err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Start",
-	//		fmt.Sprintf("Started playing %s", this.rtmpInstance.Link.Path), this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
-	//	if err != nil {
-	//		logger.LOGE(err.Error())
-	//		return
-	//	}
+	err = this.rtmpInstance.CmdStatus("status", "NetStream.Play.Start",
+		fmt.Sprintf("Started playing %s", this.rtmpInstance.Link.Path), this.rtmpInstance.Link.Path, 0, RTMP_channel_Invoke)
+	if err != nil {
+		logger.LOGE(err.Error())
+		return
+	}
 
 	logger.LOGT("start playing")
 
@@ -600,6 +600,7 @@ func (this *RTMPHandler) threadPlaying() {
 		this.playInfo.cache = list.New()
 		this.playInfo.waitPlaying.Done()
 	}()
+
 	for this.playInfo.playing == true {
 		this.playInfo.mutexCache.Lock()
 		if this.playInfo.cache == nil || this.playInfo.cache.Len() == 0 {
@@ -623,7 +624,6 @@ func (this *RTMPHandler) threadPlaying() {
 
 		err := this.rtmpInstance.SendPacket(FlvTagToRTMPPacket(tag), false)
 		if err != nil {
-			logger.LOGT("a ahahah")
 			this.updateStatus(rtmp_status_idle)
 			logger.LOGE("send rtmp packet failed in play")
 			return

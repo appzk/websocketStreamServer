@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"logger"
+	"net/http"
+	"strconv"
+	"strings"
 	"wssAPI"
+
+	"github.com/gorilla/websocket"
 )
 
 type WebSocketService struct {
@@ -32,6 +37,20 @@ func (this *WebSocketService) Init(msg *wssAPI.Msg) (err error) {
 		return errors.New("load websocket config failed")
 	}
 	service = this
+
+	go func() {
+		strPort := ":" + strconv.Itoa(serviceConfig.Port)
+		if len(serviceConfig.PlayPath) > 0 {
+			if strings.HasPrefix(serviceConfig.PlayPath, "/") == false {
+				serviceConfig.PlayPath = "/" + serviceConfig.PlayPath
+			}
+		}
+		http.Handle(serviceConfig.PlayPath, http.StripPrefix(serviceConfig.PlayPath, this))
+		err = http.ListenAndServe(strPort, nil)
+		if err != nil {
+			logger.LOGE("start websocket failed:" + err.Error())
+		}
+	}()
 	return
 }
 
@@ -66,4 +85,21 @@ func (this *WebSocketService) loadConfigFile(fileName string) (err error) {
 	}
 
 	return
+}
+
+func (this *WebSocketService) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     func(r *http.Request) bool { return true },
+	}
+	conn, err := upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		logger.LOGE(err.Error())
+		return
+	}
+
+	defer func() {
+		conn.Close()
+	}()
 }
