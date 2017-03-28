@@ -33,6 +33,7 @@ type RTMPHandler struct {
 	streamName   string
 	clientId     string
 	playInfo     RTMPPlayInfo
+	app          string
 }
 type RTMPPlayInfo struct {
 	playReset      bool
@@ -240,10 +241,18 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 	if amfobj.Props.Len() == 0 {
 		logger.LOGT(packet.Body)
 	}
+
 	method := amfobj.Props.Front().Value.(*AMF0Property)
 
 	switch method.Value.StrValue {
 	case "connect":
+		cmdObj := amfobj.AMF0GetPropByIndex(2)
+		if cmdObj != nil {
+			this.app = cmdObj.Value.ObjValue.AMF0GetPropByName("app").Value.StrValue
+		}
+		if this.app != serviceConfig.LivePath {
+			logger.LOGW("path wrong")
+		}
 		err = this.rtmpInstance.AcknowledgementBW()
 		if err != nil {
 			return

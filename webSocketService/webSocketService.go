@@ -98,8 +98,43 @@ func (this *WebSocketService) ServeHTTP(w http.ResponseWriter, req *http.Request
 		logger.LOGE(err.Error())
 		return
 	}
-
+	this.handleConn(conn, req)
 	defer func() {
 		conn.Close()
 	}()
+}
+
+func (this *WebSocketService) handleConn(conn *websocket.Conn, req *http.Request) {
+	handler := &websocketHandler{}
+	msg := &wssAPI.Msg{}
+	msg.Param1 = conn
+	handler.Init(msg)
+	for {
+		messageType, data, err := conn.ReadMessage()
+		if err != nil {
+			logger.LOGE(err.Error())
+			return
+		}
+		switch messageType {
+		case websocket.TextMessage:
+			err = conn.WriteMessage(websocket.TextMessage, data)
+			if err != nil {
+				logger.LOGI("send text msg failed:" + err.Error())
+				return
+			}
+		case websocket.BinaryMessage:
+			err = handler.processWSControl(data)
+			if err != nil {
+				return
+			}
+		case websocket.CloseMessage:
+			err = errors.New("websocket closed:" + conn.RemoteAddr().String())
+			return
+		case websocket.PingMessage:
+			//conn.WriteMessage()
+			conn.WriteMessage(websocket.PongMessage, []byte(" "))
+		case websocket.PongMessage:
+		default:
+		}
+	}
 }
