@@ -269,13 +269,13 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 	case "_result":
 		this.handle_result(amfobj)
 	case "releaseStream":
-		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
-		err = this.rtmpInstance.CmdError("error", "NetConnection.Call.Failed",
-			fmt.Sprintf("Method not found (%s).", "releaseStream"), idx)
+		//		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
+		//		err = this.rtmpInstance.CmdError("error", "NetConnection.Call.Failed",
+		//			fmt.Sprintf("Method not found (%s).", "releaseStream"), idx)
 	case "FCPublish":
-		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
-		err = this.rtmpInstance.CmdError("error", "NetConnection.Call.Failed",
-			fmt.Sprintf("Method not found (%s).", "FCPublish"), idx)
+		//		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
+		//		err = this.rtmpInstance.CmdError("error", "NetConnection.Call.Failed",
+		//			fmt.Sprintf("Method not found (%s).", "FCPublish"), idx)
 	case "createStream":
 		idx := amfobj.AMF0GetPropByIndex(1).Value.NumValue
 		err = this.rtmpInstance.CmdNumberResult(idx, 1.0)
