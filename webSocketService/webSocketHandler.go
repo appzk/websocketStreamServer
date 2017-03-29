@@ -1,10 +1,13 @@
 package webSocketService
 
 import (
+	"container/list"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"logger"
+	"streamer"
+	"sync"
 	"wssAPI"
 
 	"github.com/gorilla/websocket"
@@ -15,12 +18,34 @@ const (
 )
 
 type websocketHandler struct {
-	conn *websocket.Conn
-	app  string
+	conn         *websocket.Conn
+	app          string
+	streamName   string
+	playName     string
+	clientId     string
+	isPlaying    bool
+	mutexPlaying sync.RWMutex
+	waitPlaying  *sync.WaitGroup
+	stPlay       playInfo
+	isPublish    bool
+	mutexPublish sync.RWMutex
+	hasSink      bool
+	hasSource    bool
+}
+
+type playInfo struct {
+	cache          *list.List
+	mutexCache     sync.RWMutex
+	audioHeader    *flv.FlvTag
+	videoHeader    *flv.FlvTag
+	metadata       *flv.FlvTag
+	keyFrameWrited bool
+	beginTime      uint32
 }
 
 func (this *websocketHandler) Init(msg *wssAPI.Msg) (err error) {
 	this.conn = msg.Param1.(*websocket.Conn)
+	this.waitPlaying = new(sync.WaitGroup)
 	return
 }
 
@@ -29,6 +54,13 @@ func (this *websocketHandler) Start(msg *wssAPI.Msg) (err error) {
 }
 
 func (this *websocketHandler) Stop(msg *wssAPI.Msg) (err error) {
+	this.stopPlay()
+	if this.hasSink {
+		streamer.DelSink(this.playName, this.clientId)
+	}
+	if this.hasSource{
+		streamer.DelSource()
+	}
 	return
 }
 
@@ -45,9 +77,9 @@ func (this *websocketHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 }
 
 func (this *websocketHandler) processWSMessage(data []byte) (err error) {
-	if len(data) < 1 {
-		logger.LOGE("invalid message")
-		return errors.New("process stream message failed")
+	if nil == data {
+		this.Stop(nil)
+		return
 	}
 	msgType := int(data[0])
 	switch msgType {
@@ -58,14 +90,30 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 		switch ctrlType {
 		case WS_ctrl_connect:
 			stConnect := &WsConnect{}
-			err = json.Unmarshal(data[1:], stConnect)
+			err = json.Unmarshal(data[2:], stConnect)
 			if err != nil {
 				return
 			}
 			this.app = stConnect.App
+			logger.LOGT("connect:" + this.app)
 			return this.result(stConnect.ID, WS_status_ok, "")
 		case WS_ctrl_result:
 		case WS_ctrl_play:
+			stPlay := &WsPlay{}
+			err = json.Unmarshal(data[2:], stPlay)
+			if err != nil {
+				logger.LOGE("unmarshal json failed")
+				return
+			}
+			this.streamName = stPlay.StreamName
+			this.playName = this.app + "/" + this.streamName
+			err = streamer.AddSink(this.playName, this.clientId, this)
+			if err != nil {
+				err = this.result(stPlay.ID, WS_status_notfound, this.playName+" not found")
+				return nil
+			}
+			this.startPlay()
+			return this.result(stPlay.ID, WS_status_ok, "")
 		case WS_ctrl_play2:
 		case WS_ctrl_pause:
 		case WS_ctrl_resume:
@@ -74,6 +122,14 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 		case WS_ctrl_onMetaData:
 		case WS_ctrl_unPublish:
 		case WS_ctrl_stopPlay:
+			stStop := &WsStopPlay{}
+			err = json.Unmarshal(data[2:], stStop)
+			if err != nil {
+				logger.LOGE("unmarshal json stopplay failed")
+				return
+			}
+			this.stopPlay()
+			return this.result(stStop.ID, WS_status_ok, "")
 		}
 
 	default:
@@ -96,4 +152,46 @@ func (this *websocketHandler) result(id, status int, desc string) (err error) {
 	copy(dataSend[2:], jsondata)
 	err = this.conn.WriteMessage(websocket.BinaryMessage, dataSend)
 	return
+}
+
+func (this *websocketHandler) startPlay() {
+	//start play thread
+	this.mutexPlaying.RLock()
+	if this.isPlaying == true {
+		this.mutexPlaying.RUnlock()
+		return
+	}
+	this.mutexPlaying.RUnlock()
+	this.waitPlaying.Wait()
+	this.stPlay.reset()
+	this.isPlaying = true
+	go this.threadPlay()
+}
+
+func (this *websocketHandler) stopPlay() {
+	this.isPlaying = false
+	this.waitPlaying.Wait()
+}
+
+func (this *websocketHandler) threadPlay() {
+	this.waitPlaying.Add(1)
+	defer func() {
+		this.stPlay.reset()
+		this.waitPlaying.Done()
+	}()
+
+	for this.isPlaying {
+
+	}
+}
+
+func (this *playInfo) reset() {
+	this.mutexCache.Lock()
+	defer this.mutexCache.Unlock()
+	this.cache = list.New()
+	this.audioHeader = nil
+	this.videoHeader = nil
+	this.metadata = nil
+	this.keyFrameWrited = false
+	this.beginTime = 0
 }

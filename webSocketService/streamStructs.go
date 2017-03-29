@@ -1,7 +1,8 @@
 package webSocketService
 
 const (
-	WS_status_ok = 200
+	WS_status_ok       = 200
+	WS_status_notfound = 404
 )
 
 //1byte type,
