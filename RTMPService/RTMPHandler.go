@@ -108,7 +108,27 @@ func (this *RTMPHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
 		case flv.FLV_TAG_ScriptData:
 			if this.playInfo.metadata == nil {
 				this.playInfo.metadata = tag
-				return
+				//				obj, err := AMF0DecodeObj(tag.Data)
+
+				//				if err == nil {
+				//					obj.Dump()
+				//					for v := obj.Props.Front(); v != nil; v = v.Next() {
+				//						vp := v.Value.(*AMF0Property)
+				//						if vp.PropType == AMF0_object {
+				//							enc := &AMF0Encoder{}
+				//							enc.Init()
+				//							enc.EncodeAMFObj(&vp.Value.ObjValue)
+				//							metadata, _ := enc.GetData()
+				//							this.rtmpInstance.OnMetadata(metadata)
+				//							obj, _ = AMF0DecodeObj(metadata)
+				//							logger.LOGT(string(metadata))
+				//							obj.Dump()
+				//							break
+				//						}
+				//					}
+				//				}
+
+				return nil
 			}
 		}
 		if false == this.playInfo.keyFrameWrited {
@@ -216,6 +236,7 @@ func (this *RTMPHandler) HandleRTMPPacket(packet *RTMPPacket) (err error) {
 		if this.status == rtmp_status_publishing && this.source != nil {
 			msg := &wssAPI.Msg{}
 			msg.Type = wssAPI.MSG_FLV_TAG
+			//logger.LOGI(packet.ChunkStreamID)
 			msg.Param1 = packet.ToFLVTag()
 			this.source.ProcessMessage(msg)
 		} else {
@@ -240,6 +261,8 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 	}
 	if amfobj.Props.Len() == 0 {
 		logger.LOGT(packet.Body)
+		logger.LOGT(string(packet.Body))
+		return
 	}
 
 	method := amfobj.Props.Front().Value.(*AMF0Property)
@@ -308,7 +331,7 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 			return
 		}
 		//add to source
-		this.streamName = amfobj.AMF0GetPropByIndex(3).Value.StrValue
+		this.streamName = this.app + "/" + amfobj.AMF0GetPropByIndex(3).Value.StrValue
 		this.source, err = streamer.Addsource(this.streamName)
 		if err != nil {
 			logger.LOGE("add source failed:" + err.Error())
@@ -340,7 +363,7 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 		this.mutexStatus.Lock()
 		defer this.mutexStatus.Unlock()
 		this.updateStatus(rtmp_status_beforePlay)
-		this.streamName = amfobj.AMF0GetPropByIndex(3).Value.StrValue
+		this.streamName = this.app + "/" + amfobj.AMF0GetPropByIndex(3).Value.StrValue
 		this.rtmpInstance.Link.Path = this.streamName
 		this.playInfo.startTime = -2
 		this.playInfo.duration = -1

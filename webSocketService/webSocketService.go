@@ -123,7 +123,7 @@ func (this *WebSocketService) handleConn(conn *websocket.Conn, req *http.Request
 				return
 			}
 		case websocket.BinaryMessage:
-			err = handler.processWSControl(data)
+			err = handler.processWSMessage(data)
 			if err != nil {
 				return
 			}

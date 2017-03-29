@@ -1,5 +1,5 @@
 {
-    "Port": 1935,
+    "Port": 2935,
 	"TimeoutSec":3000,
 	"LivePath":"live"
 }

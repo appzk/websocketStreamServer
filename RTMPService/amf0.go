@@ -211,6 +211,77 @@ func (this *AMF0Encoder) GetDataSize() int {
 	return len(this.writer.Bytes())
 }
 
+func (this *AMF0Encoder) EncodeAMFObj(obj *AMF0Object) {
+	for v := obj.Props.Front(); v != nil; v = v.Next() {
+		ret := this.encodeProp(v.Value.(*AMF0Property))
+		if len(ret) > 0 {
+			this.writer.Write(ret)
+		}
+	}
+	return
+}
+
+func (this *AMF0Encoder) encodeObj(obj *AMF0Object) (data []byte) {
+	//each prop +obj_end
+	enc := &AMF0Encoder{}
+	enc.Init()
+	for v := obj.Props.Front(); v != nil; v = v.Next() {
+		enc.AppendByteArray(this.encodeProp(v.Value.(*AMF0Property)))
+	}
+	enc.EncodeInt24(AMF0_object_end)
+	data, _ = enc.GetData()
+	return data
+}
+
+func (this *AMF0Encoder) encodeProp(prop *AMF0Property) (data []byte) {
+	enc := &AMF0Encoder{}
+	enc.Init()
+
+	//has name
+	if len(prop.Name) > 0 {
+		enc.EncodeString(prop.Name)
+	}
+	//encode type
+	switch prop.PropType {
+	case AMF0_number:
+		enc.EncodeNumber(prop.Value.NumValue)
+	case AMF0_boolean:
+		enc.EncodeBool(prop.Value.BoolValue)
+	case AMF0_string:
+		enc.EncodeString(prop.Value.StrValue)
+	case AMF0_object:
+		enc.AppendByte(AMF0_object)
+		enc.AppendByteArray(this.encodeObj(&prop.Value.ObjValue))
+	case AMF0_null:
+		enc.AppendByte(AMF0_null)
+	case AMF0_ecma_array:
+		enc.AppendByte(AMF0_ecma_array)
+		//size
+		//object
+		tmp := enc.encodeObj(&prop.Value.ObjValue)
+		tmpSize := int32(len(tmp))
+		enc.EncodeInt32(tmpSize)
+		enc.AppendByteArray(tmp)
+	case AMF0_strict_array:
+		enc.AppendByte(AMF0_strict_array)
+		enc.EncodeInt32(int32(prop.Value.ObjValue.Props.Len()))
+		for v := prop.Value.ObjValue.Props.Front(); v != nil; v = v.Next() {
+			enc.AppendByteArray(this.encodeProp(v.Value.(*AMF0Property)))
+		}
+
+	case AMF0_date:
+		enc.AppendByte(AMF0_date)
+		enc.EncodeNumber(prop.Value.NumValue)
+		enc.EncodeInt16(prop.Value.S16Value)
+	case AMF0_long_string:
+		enc.EncodeString(prop.Value.StrValue)
+	default:
+		logger.LOGW(fmt.Sprintf("not support amf type:%d", prop.PropType))
+	}
+	data, _ = enc.GetData()
+	return
+}
+
 //解码
 func AMF0DecodeInt16(data []byte) (ret uint16, err error) {
 	err = binary.Read(bytes.NewReader(data), binary.BigEndian, &ret)

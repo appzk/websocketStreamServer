@@ -742,4 +742,17 @@ func (this *RTMP) FCUnpublish() (err error) {
 	return
 }
 
-//func (this *RTMP)
+func (this *RTMP) OnMetadata(data []byte) {
+	pkt := &RTMPPacket{}
+	pkt.ChunkStreamID = RTMP_channel_Invoke
+	pkt.Fmt = 0
+	pkt.MessageTypeId = RTMP_PACKET_TYPE_INFO
+	encoder := &AMF0Encoder{}
+	encoder.Init()
+	encoder.EncodeString("onMetaData")
+	encoder.AppendByteArray(data)
+	pkt.Body, _ = encoder.GetData()
+
+	pkt.MessageLength = uint32(len(pkt.Body))
+	this.SendPacket(pkt, false)
+}
