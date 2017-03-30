@@ -241,7 +241,7 @@ func (this *websocketHandler) threadPlay() {
 		}
 		//flv tag to fmp4 pkt
 		for v := this.stPlay.cache.Front(); v != nil; v = v.Next() {
-			tag := v.Value.(*flv.FlvTag)
+			//tag := v.Value.(*flv.FlvTag)
 			this.stPlay.cache.Remove(this.stPlay.cache.Front())
 		}
 		this.stPlay.mutexCache.Unlock()
