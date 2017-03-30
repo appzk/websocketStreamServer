@@ -113,9 +113,9 @@ func (this *WebSocketService) handleConn(conn *websocket.Conn, req *http.Request
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
 			logger.LOGE(err.Error())
+			handler.processWSMessage(nil)
 			return
 		}
-		handler.processWSMessage(nil)
 		switch messageType {
 		case websocket.TextMessage:
 			err = conn.WriteMessage(websocket.TextMessage, data)

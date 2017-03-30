@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"logger"
+	"mediaTypes/flv"
 	"streamer"
 	"sync"
+	"time"
 	"wssAPI"
 
 	"github.com/gorilla/websocket"
@@ -22,6 +24,7 @@ type websocketHandler struct {
 	app          string
 	streamName   string
 	playName     string
+	pubName      string
 	clientId     string
 	isPlaying    bool
 	mutexPlaying sync.RWMutex
@@ -30,7 +33,10 @@ type websocketHandler struct {
 	isPublish    bool
 	mutexPublish sync.RWMutex
 	hasSink      bool
+	mutexbSink   sync.RWMutex
 	hasSource    bool
+	mutexbSource sync.RWMutex
+	source       wssAPI.Obj
 }
 
 type playInfo struct {
@@ -54,13 +60,7 @@ func (this *websocketHandler) Start(msg *wssAPI.Msg) (err error) {
 }
 
 func (this *websocketHandler) Stop(msg *wssAPI.Msg) (err error) {
-	this.stopPlay()
-	if this.hasSink {
-		streamer.DelSink(this.playName, this.clientId)
-	}
-	if this.hasSource{
-		streamer.DelSource()
-	}
+	this.msg_close(nil)
 	return
 }
 
@@ -73,6 +73,55 @@ func (this *websocketHandler) HandleTask(task *wssAPI.Task) (err error) {
 }
 
 func (this *websocketHandler) ProcessMessage(msg *wssAPI.Msg) (err error) {
+	switch msg.Type {
+	case wssAPI.MSG_FLV_TAG:
+		tag := msg.Param1.(*flv.FlvTag)
+		switch tag.TagType {
+		case flv.FLV_TAG_Audio:
+			if this.stPlay.audioHeader == nil {
+				this.stPlay.audioHeader = tag
+				this.stPlay.audioHeader.Timestamp = 0
+				return
+			}
+		case flv.FLV_TAG_Video:
+			if this.stPlay.videoHeader == nil {
+				this.stPlay.videoHeader = tag
+				this.stPlay.videoHeader.Timestamp = 0
+				return
+			}
+			if false == this.stPlay.keyFrameWrited {
+				if (tag.Data[0] >> 4) == 1 {
+					this.stPlay.keyFrameWrited = true
+					this.stPlay.beginTime = tag.Timestamp
+					this.stPlay.addInitPkts()
+				} else {
+					return
+				}
+			}
+
+		case flv.FLV_TAG_ScriptData:
+			if this.stPlay.metadata == nil {
+				this.stPlay.metadata = tag
+
+				return nil
+			}
+		}
+		if false == this.stPlay.keyFrameWrited {
+			return
+		}
+		tag.Timestamp -= this.stPlay.beginTime
+		this.stPlay.mutexCache.Lock()
+		this.stPlay.cache.PushBack(tag)
+		this.stPlay.mutexCache.Unlock()
+	case wssAPI.MSG_PLAY_START:
+		this.startPlay()
+	case wssAPI.MSG_PLAY_STOP:
+		this.stopPlay()
+	case wssAPI.MSG_PUBLISH_START:
+		this.startPublish()
+	case wssAPI.MSG_PUBLISH_STOP:
+		this.stopPublish()
+	}
 	return
 }
 
@@ -94,9 +143,8 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 			if err != nil {
 				return
 			}
-			this.app = stConnect.App
-			logger.LOGT("connect:" + this.app)
-			return this.result(stConnect.ID, WS_status_ok, "")
+			return this.msg_connect(stConnect)
+
 		case WS_ctrl_result:
 		case WS_ctrl_play:
 			stPlay := &WsPlay{}
@@ -105,19 +153,19 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 				logger.LOGE("unmarshal json failed")
 				return
 			}
-			this.streamName = stPlay.StreamName
-			this.playName = this.app + "/" + this.streamName
-			err = streamer.AddSink(this.playName, this.clientId, this)
-			if err != nil {
-				err = this.result(stPlay.ID, WS_status_notfound, this.playName+" not found")
-				return nil
-			}
-			this.startPlay()
-			return this.result(stPlay.ID, WS_status_ok, "")
+			return this.msg_play(stPlay)
+
 		case WS_ctrl_play2:
 		case WS_ctrl_pause:
 		case WS_ctrl_resume:
 		case ws_ctrl_close:
+			stClose := &WsClose{}
+			err = json.Unmarshal(data[2:], stClose)
+			if err != nil {
+				logger.LOGE("unmarshal json failed")
+				return
+			}
+			return this.msg_close(stClose)
 		case WS_ctrl_publish:
 		case WS_ctrl_onMetaData:
 		case WS_ctrl_unPublish:
@@ -128,8 +176,7 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 				logger.LOGE("unmarshal json stopplay failed")
 				return
 			}
-			this.stopPlay()
-			return this.result(stStop.ID, WS_status_ok, "")
+			return this.msg_stopPlay(stStop)
 		}
 
 	default:
@@ -155,6 +202,7 @@ func (this *websocketHandler) result(id, status int, desc string) (err error) {
 }
 
 func (this *websocketHandler) startPlay() {
+	logger.LOGT("start play")
 	//start play thread
 	this.mutexPlaying.RLock()
 	if this.isPlaying == true {
@@ -165,12 +213,14 @@ func (this *websocketHandler) startPlay() {
 	this.waitPlaying.Wait()
 	this.stPlay.reset()
 	this.isPlaying = true
+	//send streamBegin
 	go this.threadPlay()
 }
 
 func (this *websocketHandler) stopPlay() {
 	this.isPlaying = false
 	this.waitPlaying.Wait()
+	//send streamEnd
 }
 
 func (this *websocketHandler) threadPlay() {
@@ -178,11 +228,99 @@ func (this *websocketHandler) threadPlay() {
 	defer func() {
 		this.stPlay.reset()
 		this.waitPlaying.Done()
+		this.sendStreamEnd()
 	}()
 
+	this.sendStreamBegin()
 	for this.isPlaying {
-
+		this.stPlay.mutexCache.Lock()
+		if this.stPlay.cache == nil || this.stPlay.cache.Len() == 0 {
+			this.stPlay.mutexCache.Unlock()
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+		//flv tag to fmp4 pkt
+		for v := this.stPlay.cache.Front(); v != nil; v = v.Next() {
+			tag := v.Value.(*flv.FlvTag)
+			this.stPlay.cache.Remove(this.stPlay.cache.Front())
+		}
+		this.stPlay.mutexCache.Unlock()
 	}
+}
+
+func (this *websocketHandler) startPublish() {
+
+}
+
+func (this *websocketHandler) stopPublish() {
+
+}
+
+func (this *websocketHandler) delSink(name, id string) (err error) {
+	this.mutexbSink.Lock()
+	defer this.mutexbSink.Unlock()
+	if this.hasSink {
+		err = streamer.DelSink(name, id)
+		if err != nil {
+			logger.LOGE("delete sink:" + name + " failed --" + id)
+			logger.LOGE(err.Error())
+		} else {
+
+			logger.LOGT("del sink:" + id)
+		}
+		this.hasSink = false
+	} else {
+		err = errors.New("del not existed sink")
+	}
+	return
+}
+
+func (this *websocketHandler) addSink(name, id string) (err error) {
+	this.mutexbSink.Lock()
+	defer this.mutexbSink.Unlock()
+	if false == this.hasSink {
+		err = streamer.AddSink(name, id, this)
+		if err != nil {
+			logger.LOGE(fmt.Sprintf("add sink %s to %s failed", name, id))
+			return
+		}
+		this.hasSink = true
+	} else {
+		logger.LOGE("sink not deleted")
+		err = errors.New("sink not deleted")
+	}
+	return
+}
+
+func (this *websocketHandler) addSource(name string) (err error) {
+	this.mutexbSource.Lock()
+	defer this.mutexbSource.Unlock()
+	if this.hasSource {
+		logger.LOGE("source existed")
+		return errors.New("add existed source")
+	}
+	this.source, err = streamer.Addsource(name)
+	if err != nil {
+		logger.LOGE("add source:" + name + " failed")
+		return
+	}
+	this.hasSource = true
+	return
+}
+
+func (this *websocketHandler) delSource(name string) (err error) {
+	this.mutexbSource.Lock()
+	defer this.mutexbSource.Unlock()
+	if this.hasSource == false {
+		return errors.New("del not existed source")
+	}
+	err = streamer.DelSource(name)
+	if err != nil {
+		logger.LOGE("del source:" + name + " failed")
+		return
+	}
+	this.hasSource = false
+	return
 }
 
 func (this *playInfo) reset() {
@@ -194,4 +332,18 @@ func (this *playInfo) reset() {
 	this.metadata = nil
 	this.keyFrameWrited = false
 	this.beginTime = 0
+}
+
+func (this *playInfo) addInitPkts() {
+	this.mutexCache.Lock()
+	defer this.mutexCache.Unlock()
+	if this.audioHeader != nil {
+		this.cache.PushBack(this.audioHeader)
+	}
+	if this.videoHeader != nil {
+		this.cache.PushBack(this.videoHeader)
+	}
+	if this.metadata != nil {
+		this.cache.PushBack(this.metadata)
+	}
 }

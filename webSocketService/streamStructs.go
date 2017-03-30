@@ -1,5 +1,9 @@
 package webSocketService
 
+import (
+	"github.com/gorilla/websocket"
+)
+
 const (
 	WS_status_ok       = 200
 	WS_status_notfound = 404
@@ -14,17 +18,19 @@ const (
 
 //1byte control type
 const (
-	WS_ctrl_connect    = 1
-	WS_ctrl_result     = 2
-	WS_ctrl_play       = 3
-	WS_ctrl_pause      = 4
-	WS_ctrl_resume     = 5
-	ws_ctrl_close      = 6
-	WS_ctrl_publish    = 7
-	WS_ctrl_onMetaData = 8
-	WS_ctrl_unPublish  = 9
-	WS_ctrl_stopPlay   = 10
-	WS_ctrl_play2      = 11
+	WS_ctrl_connect     = 1
+	WS_ctrl_result      = 2
+	WS_ctrl_play        = 3
+	WS_ctrl_pause       = 4
+	WS_ctrl_resume      = 5
+	ws_ctrl_close       = 6
+	WS_ctrl_publish     = 7
+	WS_ctrl_onMetaData  = 8
+	WS_ctrl_unPublish   = 9
+	WS_ctrl_stopPlay    = 10
+	WS_ctrl_play2       = 11
+	WS_ctrl_streamBegin = 12
+	WS_ctrl_streamEnd   = 13
 )
 
 type WsConnect struct {
@@ -81,4 +87,20 @@ type WsUnPublish struct {
 
 type WsStopPlay struct {
 	ID int `json:"id"`
+}
+
+type WsStreamBegin struct {
+	ID int `json:"id"`
+}
+
+type WsStreamEnd struct {
+	ID int `json:"id"`
+}
+
+func SendWsControl(conn *websocket.Conn, ctrlType int, data []byte) (err error) {
+	dataSend := make([]byte, len(data)+2)
+	dataSend[0] = WS_pkt_control
+	dataSend[1] = byte(ctrlType)
+	copy(dataSend[2:], data)
+	return conn.WriteMessage(websocket.BinaryMessage, dataSend)
 }

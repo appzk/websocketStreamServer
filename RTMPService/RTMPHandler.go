@@ -403,14 +403,17 @@ func (this *RTMPHandler) handleInvoke(packet *RTMPPacket) (err error) {
 			return
 		}
 		this.clientId = wssAPI.GenerateGUID()
+		this.mutexStatus.Unlock()
 		err = streamer.AddSink(this.streamName, this.clientId, this)
 		if err != nil {
 			//404
 			err = this.rtmpInstance.CmdStatus("error", "NetStream.Play.StreamNotFound",
 				"paly failed", this.streamName, 0, RTMP_channel_Invoke)
+			this.mutexStatus.Lock()
 			return nil
 		}
 		this.sinkAdded = true
+		this.mutexStatus.Lock()
 	case "_error":
 		amfobj.Dump()
 	default:
