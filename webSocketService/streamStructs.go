@@ -18,19 +18,19 @@ const (
 
 //1byte control type
 const (
-	WS_ctrl_connect     = 1
-	WS_ctrl_result      = 2
-	WS_ctrl_play        = 3
-	WS_ctrl_pause       = 4
-	WS_ctrl_resume      = 5
-	ws_ctrl_close       = 6
-	WS_ctrl_publish     = 7
-	WS_ctrl_onMetaData  = 8
-	WS_ctrl_unPublish   = 9
-	WS_ctrl_stopPlay    = 10
-	WS_ctrl_play2       = 11
-	WS_ctrl_streamBegin = 12
-	WS_ctrl_streamEnd   = 13
+	WS_ctrl_connect = iota
+	WS_ctrl_result
+	WS_ctrl_play
+	WS_ctrl_pause
+	WS_ctrl_resume
+	ws_ctrl_close
+	WS_ctrl_publish
+	WS_ctrl_onMetaData
+	WS_ctrl_unPublish
+	WS_ctrl_stopPlay
+	WS_ctrl_play2
+	WS_ctrl_streamBegin
+	WS_ctrl_streamEnd
 )
 
 type WsConnect struct {
