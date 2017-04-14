@@ -625,7 +625,7 @@ func (this *RTMPHandler) updateToIdle() (err error) {
 	switch this.status {
 	case rtmp_status_beforePlay:
 		err = streamer.DelSink(this.streamName, this.clientId)
-		this.status = status
+		this.status = rtmp_status_idle
 		return
 	case rtmp_status_playing:
 		err = this.stopPlaying()
@@ -633,11 +633,11 @@ func (this *RTMPHandler) updateToIdle() (err error) {
 			logger.LOGE("stop playing failed:" + err.Error())
 		}
 		err = streamer.DelSink(this.streamName, this.clientId)
-		this.status = status
+		this.status = rtmp_status_idle
 		return
 	case rtmp_status_beforePublish:
 		err = streamer.DelSource(this.streamName)
-		this.status = status
+		this.status = rtmp_status_idle
 		return
 	case rtmp_status_publishing:
 		err = this.stopPublishing()
@@ -645,7 +645,7 @@ func (this *RTMPHandler) updateToIdle() (err error) {
 			logger.LOGE("stop publish failed:" + err.Error())
 		}
 		err = streamer.DelSource(this.streamName)
-		this.status = status
+		this.status = rtmp_status_idle
 		return
 	}
 	return
@@ -656,10 +656,10 @@ func (this *RTMPHandler) updateToBeforePlay() (err error) {
 	case rtmp_status_beforePlay:
 		logger.LOGW("double before play:del sink")
 		err = streamer.DelSink(this.streamName, this.clientId)
-		this.status = status
+		this.status = rtmp_status_beforePlay
 		return
 	case rtmp_status_idle:
-		this.status = status
+		this.status = rtmp_status_beforePlay
 		return
 	case rtmp_status_playing:
 		err = this.stopPlaying()
@@ -667,7 +667,7 @@ func (this *RTMPHandler) updateToBeforePlay() (err error) {
 			logger.LOGE("stop playing failed:" + err.Error())
 		}
 		//err = streamer.DelSink(this.streamName, this.clientId)
-		this.status = status
+		this.status = rtmp_status_beforePlay
 		return
 	default:
 		logger.LOGW(fmt.Sprintf("update status to beforePlay from %d not processed", this.status))
@@ -678,7 +678,7 @@ func (this *RTMPHandler) updateToBeforePlay() (err error) {
 func (this *RTMPHandler) updateToPlaying() (err error) {
 
 	if this.status == rtmp_status_beforePlay {
-		this.status = status
+		this.status = rtmp_status_playing
 		return
 	}
 	return
@@ -688,10 +688,10 @@ func (this *RTMPHandler) updateToBeforePublish() (err error) {
 
 	switch this.status {
 	case rtmp_status_beforePublish:
-		this.status = status
+		this.status = rtmp_status_beforePublish
 		return
 	case rtmp_status_idle:
-		this.status = status
+		this.status = rtmp_status_beforePublish
 		return
 	case rtmp_status_publishing:
 		//stop publish
@@ -700,7 +700,7 @@ func (this *RTMPHandler) updateToBeforePublish() (err error) {
 			logger.LOGE("stop publish failed:" + err.Error())
 		}
 		err = streamer.DelSource(this.streamName)
-		this.status = status
+		this.status = rtmp_status_beforePublish
 		return
 	default:
 		logger.LOGW(fmt.Sprintf("update status to beforePublish from %d not processed", this.status))
@@ -710,7 +710,7 @@ func (this *RTMPHandler) updateToBeforePublish() (err error) {
 
 func (this *RTMPHandler) updateToPublishing() (err error) {
 	if this.status == rtmp_status_beforePublish {
-		this.status = status
+		this.status = rtmp_status_publishing
 		return
 	}
 	return

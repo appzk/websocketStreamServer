@@ -141,6 +141,7 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 			stConnect := &WsConnect{}
 			err = json.Unmarshal(data[2:], stConnect)
 			if err != nil {
+				logger.LOGE(err.Error())
 				return
 			}
 			return this.msg_connect(stConnect)
@@ -181,6 +182,7 @@ func (this *websocketHandler) processWSMessage(data []byte) (err error) {
 
 	default:
 		err = errors.New(fmt.Sprintf("msg type %d not supported", msgType))
+		logger.LOGW("invalid binary data")
 		return
 	}
 	return

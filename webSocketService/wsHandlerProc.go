@@ -12,6 +12,7 @@ import (
 
 //add sink
 func (this *websocketHandler) msg_play(stPlay *WsPlay) (err error) {
+	logger.LOGT("play " + stPlay.StreamName)
 	this.streamName = stPlay.StreamName
 	this.playName = this.app + "/" + this.streamName
 	this.clientId = wssAPI.GenerateGUID()
