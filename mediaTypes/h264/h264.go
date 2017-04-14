@@ -1,7 +1,7 @@
 package h264
 
 import (
-	"commonUtils"
+	"wssAPI"
 )
 
 const (
@@ -20,9 +20,11 @@ const (
 )
 
 func ParseSPS(sps []byte) (width, height, fps int) {
+	tmpSps := make([]byte, len(sps))
+	copy(tmpSps, sps)
 	realSPS := EmulationPrevention(sps)
 
-	bit := &commonUtils.BitReader{}
+	bit := &wssAPI.BitReader{}
 	bit.Init(realSPS)
 	bit.ReadBits(8)
 	profile_idc := bit.ReadBits(8)

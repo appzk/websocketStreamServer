@@ -64,3 +64,25 @@ func (this *BitReader) ReadSE() int {
 	}
 	return r
 }
+
+func (this *BitReader) CopyBits(num int) int {
+	cur := this.curBit
+	r := 0
+	for i := 0; i < num; i++ {
+		r |= (this.copyBit(cur+i) << uint(num-i-1))
+	}
+	return r
+}
+
+func (this *BitReader) copyBit(cur int) int {
+	if cur > (len(this.buf) << 3) {
+		return -1
+	}
+	idx := (cur >> 3)
+	offset := cur%8 + 1
+	return int(this.buf[idx]>>uint(8-offset)) & 0x01
+}
+
+func (this *BitReader) BitsLeft() int {
+	return (len(this.buf) << 3) - this.curBit
+}
