@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"wssAPI"
 )
 
 const save_to_file = true
@@ -369,6 +370,8 @@ func (this *FMP4Creater) createAudioInitSeg(tag *flv.FlvTag) (slice *FMP4Slice) 
 		return
 	}
 	if save_to_file {
+
+		wssAPI.CreateDirectory("audio")
 		fp, err := os.Create("audio/init.mp4")
 		if err != nil {
 			logger.LOGE(err.Error())
@@ -700,6 +703,7 @@ func (this *FMP4Creater) createVideoInitSeg(tag *flv.FlvTag) (slice *FMP4Slice) 
 
 	if save_to_file {
 
+		wssAPI.CreateDirectory("video")
 		fp, err := os.OpenFile("video/init.mp4", os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			logger.LOGE(err.Error())
@@ -818,7 +822,6 @@ func (this *FMP4Creater) createVideoSeg(tag *flv.FlvTag) (slice *FMP4Slice) {
 		return
 	}
 	if save_to_file {
-
 		fileName := "video/segment_" + strconv.Itoa(slice.Idx) + ".m4s"
 		fp, err := os.Create(fileName)
 		if err != nil {
